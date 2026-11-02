@@ -1,0 +1,260 @@
+{
+  "title": "Hikvision Intercom Chime",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ön koşullar",
+        "description": "MQTT ve kararlı Hikvision Doorbell uygulaması kurulu olmalı. Eksik bileşeni tamamladıktan sonra Gönder ile tekrar kontrol et. Bu adım ses çalmaz."
+      },
+      "device": {
+        "title": "İç ekran bağlantısı",
+        "description": "Hik-Connect hesap şifresi yerine cihazın admin parolasını gir. Parola yalnız mevcut yerel SDK uygulamasında saklanır; bu entegrasyon kaydına kopyalanmaz.",
+        "data": {
+          "host": "Cihaz IP adresi",
+          "port": "SDK portu",
+          "username": "Admin kullanıcı adı",
+          "password": "Cihaz admin parolası"
+        }
+      },
+      "confirm": {
+        "title": "Köprü yapılandırmasını onayla",
+        "description": "Hikvision Doorbell uygulamasının cihaz ayarları güncellenecek ve gerekirse uygulama yeniden başlatılacak. Bu uygulamadaki diğer iç ekranların bağlantısı kısa süre kesilebilir. Kapı, alarm ve firmware ayarları değişmez; ses çalmaz.",
+        "data": {
+          "confirm_restart": "Yapılandırmayı ve gerekirse uygulamanın yeniden başlatılmasını onaylıyorum"
+        }
+      }
+    },
+    "error": {
+      "supervisor_required": "Home Assistant OS/Supervisor gerekli. Windows uygulaması gerekmez.",
+      "mqtt_required": "Önce MQTT entegrasyonunu ve broker bağlantısını kur, sonra tekrar dene.",
+      "mqtt_disconnected": "MQTT yapılandırılmış fakat bağlantısı yok. Broker bağlantısını kontrol et.",
+      "bridge_required": "Önce https://github.com/pergolafabio/Hikvision-Addons adresinden kararlı Hikvision Doorbell uygulamasını kur.",
+      "bridge_version": "Hikvision Doorbell 3.0.34 veya daha yeni sürüm gerekli.",
+      "invalid_host": "URL veya genel IP yerine cihazın özel IPv4 adresini gir.",
+      "invalid_port": "SDK portu 1 ile 65535 arasında tam sayı olmalı.",
+      "invalid_credentials": "Cihaz admin kullanıcı adı ve parolasını gir; her biri en fazla 64 UTF-8 bayt olmalı ve kontrol karakteri içermemeli.",
+      "ambiguous_bridge_device": "Köprüde yinelenen cihaz veya çakışan adlar var. Önce bunları düzelt.",
+      "bridge_device_missing": "Köprüde yapılandırılan cihaz artık yok. Yeniden yapılandırmadan önce geri ekle.",
+      "invalid_bridge_name": "Köprü cihaz adında yalnız temel Latin harfleri, rakam, boşluk, alt çizgi veya tire kullan.",
+      "bridge_config_failed": "Köprü yapılandırması/başlatması başarısız. Önceki seçenekler geri yüklendi. Uygulamayı kontrol et.",
+      "bridge_rollback_failed": "Köprü kurulumu ve geri yükleme başarısız. Uygulama yapılandırmasını HA yedeğinden geri yükle.",
+      "bridge_entities_missing": "Gerekli MQTT Broadcast varlıkları eksik, devre dışı veya belirsiz. Cihaz girişini ve MQTT keşfini kontrol et.",
+      "bridge_stopped": "Hikvision Doorbell uygulaması durmuş. Önce uygulamayı başlat.",
+      "bridge_unavailable": "Gerekli Broadcast kontrolleri kullanılamıyor. Ses isteği gönderilmedi.",
+      "integration_not_ready": "Entegrasyon yüklenmemiş. Ses ayarından önce kurulum hatasını düzelt.",
+      "invalid_gain": "Gain -30 ile +30 dB arasında sonlu bir sayı olmalı.",
+      "invalid_repeats": "Tekrar sayısı 1 ile 10 arasında tam sayı olmalı.",
+      "invalid_file_size": "WAV dosyası boş olmamalı ve 1 MiB boyutunu aşmamalı.",
+      "invalid_wav": "Yüklenen dosya geçerli bir desteklenen WAV değil.",
+      "unsupported_wav": "Sıkıştırılmamış 8000 Hz, mono, 16-bit PCM WAV kullan. Diğer biçimleri yüklemeden önce dönüştür.",
+      "invalid_duration": "Kaynak ses sıfırdan uzun ve en fazla 30 saniye olmalı.",
+      "consent_required": "Devam etmek için köprü yapılandırmasını/yeniden başlatmasını onayla.",
+      "confirmation_required": "Devam etmek için köprü yapılandırmasını/yeniden başlatmasını onayla.",
+      "truncated_wav": "WAV dosyası eksik. Tam dosyayı yeniden yükle.",
+      "total_duration_exceeded": "Ses süresi ile tekrar sayısının çarpımı 60 saniyeyi aşmamalı.",
+      "busy": "Bir zil işlemi zaten sürüyor. Yeni işlem kuyruğa alınmadı.",
+      "unsafe_storage": "Ses deposunda güvenli olmayan bağlantı veya tutarsız dosya var. Yerel depoyu kontrol et.",
+      "invalid_storage_id": "Entegrasyona ait ses tanımlayıcısı geçersiz.",
+      "source_limit": "Cihaz başına 16 farklı ses yükleme sınırına ulaşıldı. Mevcut sesler korundu.",
+      "call_active": "Köprü boşta görünmüyor. Görüşmeyi kesmemek için zil engellendi.",
+      "call_state_missing": "Tek ve geçerli bir çağrı durumu sensörü yok. Zil engellendi.",
+      "playback_request_failed": "Ses isteği başarısız. Sesin duyulduğu doğrulanmadı.",
+      "stop_request_failed": "Durdurma isteği başarısız. SDK uygulamasını kontrol et; süre sınırı olan dosya kendiliğinden tamamlanmalı.",
+      "storage_unavailable": "Özel ses deposuna erişilemiyor."
+    },
+    "abort": {
+      "already_configured": "Bu cihaz zaten yapılandırılmış.",
+      "setup_expired": "Kurulum bilgileri zaman aşımına uğradı. Baştan başla.",
+      "reconfigure_successful": "Yeniden yapılandırma tamamlandı."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ses ve tekrar ayarları",
+        "description": "Dosya isteğe bağlıdır. WAV: 8000 Hz, mono, 16-bit PCM; en fazla 1 MiB/30 saniye. Toplam tekrar süresi en fazla 60 saniye. Pozitif gain sesi bozabilir; donanım ses sınırını yükseltmez. Kaydetmek ses çalmaz.",
+        "data": {
+          "audio_file": "WAV ses dosyası",
+          "gain_db": "Dijital gain (dB)",
+          "repeats": "Tekrar sayısı"
+        }
+      }
+    },
+    "error": {
+      "supervisor_required": "Home Assistant OS/Supervisor gerekli. Windows uygulaması gerekmez.",
+      "mqtt_required": "Önce MQTT entegrasyonunu ve broker bağlantısını kur, sonra tekrar dene.",
+      "mqtt_disconnected": "MQTT yapılandırılmış fakat bağlantısı yok. Broker bağlantısını kontrol et.",
+      "bridge_required": "Önce https://github.com/pergolafabio/Hikvision-Addons adresinden kararlı Hikvision Doorbell uygulamasını kur.",
+      "bridge_version": "Hikvision Doorbell 3.0.34 veya daha yeni sürüm gerekli.",
+      "invalid_host": "URL veya genel IP yerine cihazın özel IPv4 adresini gir.",
+      "invalid_port": "SDK portu 1 ile 65535 arasında tam sayı olmalı.",
+      "invalid_credentials": "Cihaz admin kullanıcı adı ve parolasını gir; her biri en fazla 64 UTF-8 bayt olmalı ve kontrol karakteri içermemeli.",
+      "ambiguous_bridge_device": "Köprüde yinelenen cihaz veya çakışan adlar var. Önce bunları düzelt.",
+      "bridge_device_missing": "Köprüde yapılandırılan cihaz artık yok. Yeniden yapılandırmadan önce geri ekle.",
+      "invalid_bridge_name": "Köprü cihaz adında yalnız temel Latin harfleri, rakam, boşluk, alt çizgi veya tire kullan.",
+      "bridge_config_failed": "Köprü yapılandırması/başlatması başarısız. Önceki seçenekler geri yüklendi. Uygulamayı kontrol et.",
+      "bridge_rollback_failed": "Köprü kurulumu ve geri yükleme başarısız. Uygulama yapılandırmasını HA yedeğinden geri yükle.",
+      "bridge_entities_missing": "Gerekli MQTT Broadcast varlıkları eksik, devre dışı veya belirsiz. Cihaz girişini ve MQTT keşfini kontrol et.",
+      "bridge_stopped": "Hikvision Doorbell uygulaması durmuş. Önce uygulamayı başlat.",
+      "bridge_unavailable": "Gerekli Broadcast kontrolleri kullanılamıyor. Ses isteği gönderilmedi.",
+      "integration_not_ready": "Entegrasyon yüklenmemiş. Ses ayarından önce kurulum hatasını düzelt.",
+      "invalid_gain": "Gain -30 ile +30 dB arasında sonlu bir sayı olmalı.",
+      "invalid_repeats": "Tekrar sayısı 1 ile 10 arasında tam sayı olmalı.",
+      "invalid_file_size": "WAV dosyası boş olmamalı ve 1 MiB boyutunu aşmamalı.",
+      "invalid_wav": "Yüklenen dosya geçerli bir desteklenen WAV değil.",
+      "unsupported_wav": "Sıkıştırılmamış 8000 Hz, mono, 16-bit PCM WAV kullan. Diğer biçimleri yüklemeden önce dönüştür.",
+      "invalid_duration": "Kaynak ses sıfırdan uzun ve en fazla 30 saniye olmalı.",
+      "consent_required": "Devam etmek için köprü yapılandırmasını/yeniden başlatmasını onayla.",
+      "confirmation_required": "Devam etmek için köprü yapılandırmasını/yeniden başlatmasını onayla.",
+      "truncated_wav": "WAV dosyası eksik. Tam dosyayı yeniden yükle.",
+      "total_duration_exceeded": "Ses süresi ile tekrar sayısının çarpımı 60 saniyeyi aşmamalı.",
+      "busy": "Bir zil işlemi zaten sürüyor. Yeni işlem kuyruğa alınmadı.",
+      "unsafe_storage": "Ses deposunda güvenli olmayan bağlantı veya tutarsız dosya var. Yerel depoyu kontrol et.",
+      "invalid_storage_id": "Entegrasyona ait ses tanımlayıcısı geçersiz.",
+      "source_limit": "Cihaz başına 16 farklı ses yükleme sınırına ulaşıldı. Mevcut sesler korundu.",
+      "call_active": "Köprü boşta görünmüyor. Görüşmeyi kesmemek için zil engellendi.",
+      "call_state_missing": "Tek ve geçerli bir çağrı durumu sensörü yok. Zil engellendi.",
+      "playback_request_failed": "Ses isteği başarısız. Sesin duyulduğu doğrulanmadı.",
+      "stop_request_failed": "Durdurma isteği başarısız. SDK uygulamasını kontrol et; süre sınırı olan dosya kendiliğinden tamamlanmalı.",
+      "storage_unavailable": "Özel ses deposuna erişilemiyor."
+    }
+  },
+  "entity": {
+    "button": {
+      "play": {
+        "name": "Zil çal"
+      },
+      "stop": {
+        "name": "Zili durdur"
+      }
+    },
+    "number": {
+      "gain_db": {
+        "name": "Dijital gain"
+      },
+      "repeats": {
+        "name": "Tekrar sayısı"
+      }
+    },
+    "sensor": {
+      "status": {
+        "name": "İstek durumu",
+        "state": {
+          "idle": "Boşta",
+          "sending": "Ses istendi",
+          "error": "Hata"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "supervisor_required": {
+      "message": "Home Assistant OS/Supervisor gerekli. Windows uygulaması gerekmez."
+    },
+    "mqtt_required": {
+      "message": "Önce MQTT entegrasyonunu ve broker bağlantısını kur, sonra tekrar dene."
+    },
+    "mqtt_disconnected": {
+      "message": "MQTT yapılandırılmış fakat bağlantısı yok. Broker bağlantısını kontrol et."
+    },
+    "bridge_required": {
+      "message": "Önce https://github.com/pergolafabio/Hikvision-Addons adresinden kararlı Hikvision Doorbell uygulamasını kur."
+    },
+    "bridge_version": {
+      "message": "Hikvision Doorbell 3.0.34 veya daha yeni sürüm gerekli."
+    },
+    "invalid_host": {
+      "message": "URL veya genel IP yerine cihazın özel IPv4 adresini gir."
+    },
+    "invalid_port": {
+      "message": "SDK portu 1 ile 65535 arasında tam sayı olmalı."
+    },
+    "invalid_credentials": {
+      "message": "Cihaz admin kullanıcı adı ve parolasını gir; her biri en fazla 64 UTF-8 bayt olmalı ve kontrol karakteri içermemeli."
+    },
+    "ambiguous_bridge_device": {
+      "message": "Köprüde yinelenen cihaz veya çakışan adlar var. Önce bunları düzelt."
+    },
+    "bridge_device_missing": {
+      "message": "Köprüde yapılandırılan cihaz artık yok. Yeniden yapılandırmadan önce geri ekle."
+    },
+    "invalid_bridge_name": {
+      "message": "Köprü cihaz adında yalnız temel Latin harfleri, rakam, boşluk, alt çizgi veya tire kullan."
+    },
+    "bridge_config_failed": {
+      "message": "Köprü yapılandırması/başlatması başarısız. Önceki seçenekler geri yüklendi. Uygulamayı kontrol et."
+    },
+    "bridge_rollback_failed": {
+      "message": "Köprü kurulumu ve geri yükleme başarısız. Uygulama yapılandırmasını HA yedeğinden geri yükle."
+    },
+    "bridge_entities_missing": {
+      "message": "Gerekli MQTT Broadcast varlıkları eksik, devre dışı veya belirsiz. Cihaz girişini ve MQTT keşfini kontrol et."
+    },
+    "bridge_stopped": {
+      "message": "Hikvision Doorbell uygulaması durmuş. Önce uygulamayı başlat."
+    },
+    "bridge_unavailable": {
+      "message": "Gerekli Broadcast kontrolleri kullanılamıyor. Ses isteği gönderilmedi."
+    },
+    "integration_not_ready": {
+      "message": "Entegrasyon yüklenmemiş. Ses ayarından önce kurulum hatasını düzelt."
+    },
+    "invalid_gain": {
+      "message": "Gain -30 ile +30 dB arasında sonlu bir sayı olmalı."
+    },
+    "invalid_repeats": {
+      "message": "Tekrar sayısı 1 ile 10 arasında tam sayı olmalı."
+    },
+    "invalid_file_size": {
+      "message": "WAV dosyası boş olmamalı ve 1 MiB boyutunu aşmamalı."
+    },
+    "invalid_wav": {
+      "message": "Yüklenen dosya geçerli bir desteklenen WAV değil."
+    },
+    "unsupported_wav": {
+      "message": "Sıkıştırılmamış 8000 Hz, mono, 16-bit PCM WAV kullan. Diğer biçimleri yüklemeden önce dönüştür."
+    },
+    "invalid_duration": {
+      "message": "Kaynak ses sıfırdan uzun ve en fazla 30 saniye olmalı."
+    },
+    "consent_required": {
+      "message": "Devam etmek için köprü yapılandırmasını/yeniden başlatmasını onayla."
+    },
+    "confirmation_required": {
+      "message": "Devam etmek için köprü yapılandırmasını/yeniden başlatmasını onayla."
+    },
+    "truncated_wav": {
+      "message": "WAV dosyası eksik. Tam dosyayı yeniden yükle."
+    },
+    "total_duration_exceeded": {
+      "message": "Ses süresi ile tekrar sayısının çarpımı 60 saniyeyi aşmamalı."
+    },
+    "busy": {
+      "message": "Bir zil işlemi zaten sürüyor. Yeni işlem kuyruğa alınmadı."
+    },
+    "unsafe_storage": {
+      "message": "Ses deposunda güvenli olmayan bağlantı veya tutarsız dosya var. Yerel depoyu kontrol et."
+    },
+    "invalid_storage_id": {
+      "message": "Entegrasyona ait ses tanımlayıcısı geçersiz."
+    },
+    "source_limit": {
+      "message": "Cihaz başına 16 farklı ses yükleme sınırına ulaşıldı. Mevcut sesler korundu."
+    },
+    "call_active": {
+      "message": "Köprü boşta görünmüyor. Görüşmeyi kesmemek için zil engellendi."
+    },
+    "call_state_missing": {
+      "message": "Tek ve geçerli bir çağrı durumu sensörü yok. Zil engellendi."
+    },
+    "playback_request_failed": {
+      "message": "Ses isteği başarısız. Sesin duyulduğu doğrulanmadı."
+    },
+    "stop_request_failed": {
+      "message": "Durdurma isteği başarısız. SDK uygulamasını kontrol et; süre sınırı olan dosya kendiliğinden tamamlanmalı."
+    },
+    "storage_unavailable": {
+      "message": "Özel ses deposuna erişilemiyor."
+    }
+  }
+}

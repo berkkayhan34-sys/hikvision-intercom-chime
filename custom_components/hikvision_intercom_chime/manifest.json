@@ -1,0 +1,14 @@
+{
+  "domain": "hikvision_intercom_chime",
+  "name": "Hikvision Intercom Chime",
+  "version": "0.1.1",
+  "codeowners": ["@berkkayhan34-sys"],
+  "config_flow": true,
+  "documentation": "https://github.com/berkkayhan34-sys/hikvision-intercom-chime",
+  "issue_tracker": "https://github.com/berkkayhan34-sys/hikvision-intercom-chime/issues",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "dependencies": ["file_upload"],
+  "after_dependencies": ["hassio", "mqtt"],
+  "requirements": []
+}
