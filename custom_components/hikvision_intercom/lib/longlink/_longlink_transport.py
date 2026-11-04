@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import suppress
 import socket
 import time
+from collections.abc import Callable
+from contextlib import suppress
 from types import TracebackType
 
 MAX_PAYLOAD = 65536

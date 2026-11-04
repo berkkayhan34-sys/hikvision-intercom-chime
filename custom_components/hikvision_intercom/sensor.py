@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -12,11 +12,11 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfInformation, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.util import dt as dt_util
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import CALL_STATES, DOMAIN
 from .entity import ChimeEntity
@@ -37,24 +37,71 @@ def _last_offline(status: dict):
     ts = status.get("offline_timestamp")
     if not isinstance(ts, (int, float)) or ts <= 0:
         return None
-    return datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
+    return datetime.fromtimestamp(ts / 1000, tz=UTC)
 
 
 # key, name, icon, unit, device_class, state_class, options, value_fn
 _METRICS = (
-    ("wifi_signal", "WiFi signal", "mdi:wifi", "%", None,
-     SensorStateClass.MEASUREMENT, None, lambda s: s.get("wifi_signal")),
-    ("local_ip", "LAN IP", "mdi:ip-network-outline", None, None, None, None,
-     lambda s: s.get("local_ip")),
-    ("wan_ip", "WAN IP", "mdi:ip-network", None, None, None, None,
-     lambda s: s.get("wan_ip")),
-    ("connection_type", "Connection type", "mdi:lan", None,
-     SensorDeviceClass.ENUM, None, ["wired", "wireless"], _connection_type),
-    ("storage_capacity", "Storage capacity", "mdi:sd",
-     UnitOfInformation.GIGABYTES, SensorDeviceClass.DATA_SIZE,
-     SensorStateClass.MEASUREMENT, None, lambda s: s.get("disk_capacity_gb")),
-    ("last_offline", "Last offline", None, None,
-     SensorDeviceClass.TIMESTAMP, None, None, _last_offline),
+    (
+        "wifi_signal",
+        "WiFi signal",
+        "mdi:wifi",
+        "%",
+        None,
+        SensorStateClass.MEASUREMENT,
+        None,
+        lambda s: s.get("wifi_signal"),
+    ),
+    (
+        "local_ip",
+        "LAN IP",
+        "mdi:ip-network-outline",
+        None,
+        None,
+        None,
+        None,
+        lambda s: s.get("local_ip"),
+    ),
+    (
+        "wan_ip",
+        "WAN IP",
+        "mdi:ip-network",
+        None,
+        None,
+        None,
+        None,
+        lambda s: s.get("wan_ip"),
+    ),
+    (
+        "connection_type",
+        "Connection type",
+        "mdi:lan",
+        None,
+        SensorDeviceClass.ENUM,
+        None,
+        ["wired", "wireless"],
+        _connection_type,
+    ),
+    (
+        "storage_capacity",
+        "Storage capacity",
+        "mdi:sd",
+        UnitOfInformation.GIGABYTES,
+        SensorDeviceClass.DATA_SIZE,
+        SensorStateClass.MEASUREMENT,
+        None,
+        lambda s: s.get("disk_capacity_gb"),
+    ),
+    (
+        "last_offline",
+        "Last offline",
+        None,
+        None,
+        SensorDeviceClass.TIMESTAMP,
+        None,
+        None,
+        _last_offline,
+    ),
 )
 
 
@@ -63,20 +110,56 @@ def _operation_time(key: str):
 
 
 _STATION_METRICS = (
-    ("sd_card", "SD card", "mdi:micro-sd", None, None, None, None,
-     lambda s: (s.get("work_status") or {}).get("TFCardStatus")),
-    ("max_ring_time", "Max ring time", "mdi:bell-ring-outline",
-     UnitOfTime.SECONDS, SensorDeviceClass.DURATION, None, None,
-     _operation_time("maxRingTime")),
-    ("ring_duration", "Ring duration", "mdi:bell-outline",
-     UnitOfTime.SECONDS, SensorDeviceClass.DURATION, None, None,
-     _operation_time("ringDurationTime")),
-    ("max_monitoring_time", "Max monitoring time", "mdi:cctv",
-     UnitOfTime.SECONDS, SensorDeviceClass.DURATION, None, None,
-     _operation_time("maxMonitoringTime")),
-    ("call_forwarding_time", "Call forwarding time", "mdi:phone-forward",
-     UnitOfTime.SECONDS, SensorDeviceClass.DURATION, None, None,
-     _operation_time("callForwardingTime")),
+    (
+        "sd_card",
+        "SD card",
+        "mdi:micro-sd",
+        None,
+        None,
+        None,
+        None,
+        lambda s: (s.get("work_status") or {}).get("TFCardStatus"),
+    ),
+    (
+        "max_ring_time",
+        "Max ring time",
+        "mdi:bell-ring-outline",
+        UnitOfTime.SECONDS,
+        SensorDeviceClass.DURATION,
+        None,
+        None,
+        _operation_time("maxRingTime"),
+    ),
+    (
+        "ring_duration",
+        "Ring duration",
+        "mdi:bell-outline",
+        UnitOfTime.SECONDS,
+        SensorDeviceClass.DURATION,
+        None,
+        None,
+        _operation_time("ringDurationTime"),
+    ),
+    (
+        "max_monitoring_time",
+        "Max monitoring time",
+        "mdi:cctv",
+        UnitOfTime.SECONDS,
+        SensorDeviceClass.DURATION,
+        None,
+        None,
+        _operation_time("maxMonitoringTime"),
+    ),
+    (
+        "call_forwarding_time",
+        "Call forwarding time",
+        "mdi:phone-forward",
+        UnitOfTime.SECONDS,
+        SensorDeviceClass.DURATION,
+        None,
+        None,
+        _operation_time("callForwardingTime"),
+    ),
 )
 
 
@@ -137,8 +220,19 @@ class HikMetricSensor(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator, serial, key, name, icon, unit,
-                 device_class, state_class, options, value_fn):
+    def __init__(
+        self,
+        coordinator,
+        serial,
+        key,
+        name,
+        icon,
+        unit,
+        device_class,
+        state_class,
+        options,
+        value_fn,
+    ):
         super().__init__(coordinator)
         self._serial = serial
         self._value_fn = value_fn
@@ -188,7 +282,9 @@ class HikLastRingSensor(CoordinatorEntity, SensorEntity, RestoreEntity):
         return DeviceInfo(identifiers={(DOMAIN, self._serial)})
 
     def _update_ring(self) -> None:
-        ring = ((self.coordinator.data or {}).get(self._serial) or {}).get("last_ring") or {}
+        ring = ((self.coordinator.data or {}).get(self._serial) or {}).get(
+            "last_ring"
+        ) or {}
         msg_id = ring.get("msg_id")
         if not msg_id:
             return
@@ -196,7 +292,7 @@ class HikLastRingSensor(CoordinatorEntity, SensorEntity, RestoreEntity):
             ts = ring.get("time")
             if not isinstance(ts, (int, float)):
                 return
-            self._attr_native_value = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
+            self._attr_native_value = datetime.fromtimestamp(ts / 1000, tz=UTC)
             self._msg_id = msg_id
         self._calling_status = ring.get("calling_status")
 

@@ -26,9 +26,7 @@ async def async_setup_entry(
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
     quality = data["quality"]
-    async_add_entities(
-        HikStreamQualitySelect(cam, quality) for cam in data["cameras"]
-    )
+    async_add_entities(HikStreamQualitySelect(cam, quality) for cam in data["cameras"])
 
 
 class HikStreamQualitySelect(SelectEntity, RestoreEntity):

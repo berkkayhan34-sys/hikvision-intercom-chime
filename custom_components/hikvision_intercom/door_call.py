@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterable
 from contextlib import asynccontextmanager
-import logging
 
 from homeassistant.core import HomeAssistant
 
@@ -36,9 +36,13 @@ class DoorCall:
 
     async def _answer(self) -> None:
         serial = self._chime.device_serial
-        cloud = (self._hass.data.get(DOMAIN, {}).get(self._entry_id) or {}).get("client")
+        cloud = (self._hass.data.get(DOMAIN, {}).get(self._entry_id) or {}).get(
+            "client"
+        )
         if serial is None or cloud is None:
-            raise BridgeError("no_call")  # which cloud device rings is not known, so nothing is answered blindly
+            raise BridgeError(
+                "no_call"
+            )  # which cloud device rings is not known, so nothing is answered blindly
         try:
             await self._hass.async_add_executor_job(cloud.answer_call, serial)
         except HikConnectError:

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import json
 import socket
+from collections.abc import Callable
 from threading import Event, Lock
 from time import monotonic
 from typing import Any
@@ -114,7 +114,11 @@ class Channel99Session:
                     return
                 try:
                     credentials = authenticate(
-                        lbs, self.serial, self.credentials_input(), self.state, self.save
+                        lbs,
+                        self.serial,
+                        self.credentials_input(),
+                        self.state,
+                        self.save,
                     )
                 except EzvizPushFatalError:
                     # A polling refresh can supersede the credential while the
@@ -136,14 +140,21 @@ class Channel99Session:
         try:
             if stopped.is_set() or self._closed.is_set() or not self.is_current():
                 return
-            client.connect(credentials.broker["Address"], credentials.broker["Port"], keepalive=30)
+            client.connect(
+                credentials.broker["Address"], credentials.broker["Port"], keepalive=30
+            )
             deadline = monotonic() + _MQTT_SETUP_TIMEOUT
-            while not stopped.is_set() and not self._closed.is_set() and self.is_current():
+            while (
+                not stopped.is_set() and not self._closed.is_set() and self.is_current()
+            ):
                 result = client.loop(timeout=1)
                 self.last_loop_result = int(result)
                 if self._failure is not None:
                     raise self._failure
-                if result == mqtt.MQTT_ERR_PROTOCOL and self.last_connect_reason is None:
+                if (
+                    result == mqtt.MQTT_ERR_PROTOCOL
+                    and self.last_connect_reason is None
+                ):
                     # Paho skips on_connect for MQTT 3.1.1 protocol-version refusal.
                     self._failure = EzvizPushFatalError(
                         "MQTT setup protocol rejected; caller intervention required"
@@ -152,7 +163,9 @@ class Channel99Session:
                 if result != mqtt.MQTT_ERR_SUCCESS:
                     return
                 if not self.ready.is_set() and monotonic() >= deadline:
-                    raise TimeoutError("MQTT connection/subscription acknowledgement timed out")
+                    raise TimeoutError(
+                        "MQTT connection/subscription acknowledgement timed out"
+                    )
         except Exception as error:
             if self._failure is not None and error is not self._failure:
                 raise self._failure from error
@@ -212,7 +225,10 @@ class Channel99Session:
         topic = ("/Basic/pu2cenplt/" + serial + "/firstconnect").ljust(128, "\0")
         client.will_set(
             topic,
-            wire.encrypt(credentials.session_key, json.dumps(will, separators=(",", ":")).encode()),
+            wire.encrypt(
+                credentials.session_key,
+                json.dumps(will, separators=(",", ":")).encode(),
+            ),
             qos=1,
             retain=True,
         )
@@ -238,13 +254,19 @@ class Channel99Session:
             if result != mqtt.MQTT_ERR_SUCCESS:
                 subscription_mid = None
                 if result == mqtt.MQTT_ERR_INVAL:
-                    self._failure = EzvizPushFatalError("Invalid MQTT subscription request")
+                    self._failure = EzvizPushFatalError(
+                        "Invalid MQTT subscription request"
+                    )
                 c.disconnect()
 
         def subscribed(
             c: mqtt.Client, userdata: Any, mid: int, reasons: Any, properties: Any
         ) -> None:
-            if self._closed.is_set() or not self.is_current() or mid != subscription_mid:
+            if (
+                self._closed.is_set()
+                or not self.is_current()
+                or mid != subscription_mid
+            ):
                 return
             self.last_subscribe_reasons = [reason.value for reason in reasons]
             if any(reason.is_failure for reason in reasons):
@@ -277,10 +299,14 @@ class Channel99Session:
         client.on_message = received
         return client
 
-    def _receive(self, client: mqtt.Client, message: mqtt.MQTTMessage, key: bytes) -> None:
+    def _receive(
+        self, client: mqtt.Client, message: mqtt.MQTTMessage, key: bytes
+    ) -> None:
         if len(message.payload) > 65536:
             return
-        event = wire.decode_event_envelope(message.topic, message.payload, key, self.serial)
+        event = wire.decode_event_envelope(
+            message.topic, message.payload, key, self.serial
+        )
         domain, command = event["domain"], event["command"]
         if domain == 1000 and command == 1:
             interval = wire.control_keepalive(event["body"])

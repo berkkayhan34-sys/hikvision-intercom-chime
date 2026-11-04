@@ -25,7 +25,9 @@ class DoorListenView(HomeAssistantView):
     name = "api:hikvision_intercom:listen"
     requires_auth = True
 
-    async def get(self, request: web.Request, entry_id: str, subentry_id: str) -> web.StreamResponse:
+    async def get(
+        self, request: web.Request, entry_id: str, subentry_id: str
+    ) -> web.StreamResponse:
         user = request.get(KEY_HASS_USER)
         if user is None or not user.is_admin:
             return web.json_response({"error": "forbidden"}, status=403)
@@ -33,7 +35,9 @@ class DoorListenView(HomeAssistantView):
         door_call = (data or {}).get("door_calls", {}).get(subentry_id)
         if door_call is None:
             return web.json_response({"error": "not_found"}, status=404)
-        response = web.StreamResponse(headers={"Content-Type": "audio/wav", "Cache-Control": "no-store"})
+        response = web.StreamResponse(
+            headers={"Content-Type": "audio/wav", "Cache-Control": "no-store"}
+        )
         try:
             async with door_call.listen() as chunks:
                 await response.prepare(request)
@@ -43,9 +47,11 @@ class DoorListenView(HomeAssistantView):
         except BridgeError as error:
             if response.prepared:
                 return response  # the call ended mid-stream: the stream simply ends
-            return web.json_response({"error": error.code}, status=_STATUS.get(error.code, 502))
-        except (ConnectionResetError, asyncio.CancelledError):
+            return web.json_response(
+                {"error": error.code}, status=_STATUS.get(error.code, 502)
+            )
+        except ConnectionResetError, asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 - a failing upstream ends the stream, never the server
+        except Exception:
             _LOGGER.debug("listen stream ended", exc_info=True)
         return response

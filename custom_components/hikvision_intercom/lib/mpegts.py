@@ -47,7 +47,15 @@ class TsMuxer:
         self._pmt = _section(
             bytes([0x02, 0xB0, 18, 0x00, 0x01, 0xC1, 0x00, 0x00])
             + bytes([0xE0 | _VIDEO_PID >> 8, _VIDEO_PID & 0xFF, 0xF0, 0x00])
-            + bytes([_STREAM_TYPE[codec], 0xE0 | _VIDEO_PID >> 8, _VIDEO_PID & 0xFF, 0xF0, 0x00])
+            + bytes(
+                [
+                    _STREAM_TYPE[codec],
+                    0xE0 | _VIDEO_PID >> 8,
+                    _VIDEO_PID & 0xFF,
+                    0xF0,
+                    0x00,
+                ]
+            )
         )
 
     def mux(self, ts: int, unit: bytes, key: bool) -> bytes:
@@ -62,13 +70,15 @@ class TsMuxer:
             out += self._psi(0, self._pat) + self._psi(_PMT_PID, self._pmt)
         pes = (
             b"\x00\x00\x01\xe0\x00\x00\x84\x80\x05"
-            + bytes([
-                0x21 | (pts >> 29) & 0x0E,
-                (pts >> 22) & 0xFF,
-                0x01 | (pts >> 14) & 0xFE,
-                (pts >> 7) & 0xFF,
-                0x01 | (pts << 1) & 0xFE,
-            ])
+            + bytes(
+                [
+                    0x21 | (pts >> 29) & 0x0E,
+                    (pts >> 22) & 0xFF,
+                    0x01 | (pts >> 14) & 0xFE,
+                    (pts >> 7) & 0xFF,
+                    0x01 | (pts << 1) & 0xFE,
+                ]
+            )
             + self._aud
             + unit
         )
@@ -92,15 +102,17 @@ class TsMuxer:
         while first or pos < len(pes):
             fields = b""
             if first:
-                fields = bytes([
-                    (0x40 if key else 0) | 0x10,
-                    (pcr >> 25) & 0xFF,
-                    (pcr >> 17) & 0xFF,
-                    (pcr >> 9) & 0xFF,
-                    (pcr >> 1) & 0xFF,
-                    (pcr & 1) << 7 | 0x7E,
-                    0x00,
-                ])
+                fields = bytes(
+                    [
+                        (0x40 if key else 0) | 0x10,
+                        (pcr >> 25) & 0xFF,
+                        (pcr >> 17) & 0xFF,
+                        (pcr >> 9) & 0xFF,
+                        (pcr >> 1) & 0xFF,
+                        (pcr & 1) << 7 | 0x7E,
+                        0x00,
+                    ]
+                )
             room = 184 - (1 + len(fields) if fields else 0)
             n = min(room, len(pes) - pos)
             if fields or n < 184:
@@ -109,18 +121,22 @@ class TsMuxer:
                     adaptation = b"\x00"
                 else:
                     body = fields or b"\x00"
-                    adaptation = bytes([size - 1]) + body + b"\xff" * (size - 1 - len(body))
+                    adaptation = (
+                        bytes([size - 1]) + body + b"\xff" * (size - 1 - len(body))
+                    )
                 control = 0x30
             else:
                 adaptation = b""
                 control = 0x10
-            out += bytes([
-                0x47,
-                (0x40 if first else 0) | _VIDEO_PID >> 8,
-                _VIDEO_PID & 0xFF,
-                control | self._next_cc(_VIDEO_PID),
-            ])
-            out += adaptation + pes[pos:pos + n]
+            out += bytes(
+                [
+                    0x47,
+                    (0x40 if first else 0) | _VIDEO_PID >> 8,
+                    _VIDEO_PID & 0xFF,
+                    control | self._next_cc(_VIDEO_PID),
+                ]
+            )
+            out += adaptation + pes[pos : pos + n]
             pos += n
             first = False
         return bytes(out)

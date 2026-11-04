@@ -18,7 +18,6 @@ from .const import DOMAIN
 from .entity import ChimeEntity
 
 
-
 async def _async_setup_cloud(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -28,7 +27,9 @@ async def _async_setup_cloud(
     registry = er.async_get(hass)
     entities = []
     for dev in data["devices"]:
-        stale = registry.async_get_entity_id("button", DOMAIN, f"{DOMAIN}_{dev.serial}_cancel")
+        stale = registry.async_get_entity_id(
+            "button", DOMAIN, f"{DOMAIN}_{dev.serial}_cancel"
+        )
         if stale:
             registry.async_remove(stale)
         entities.append(HikAnswerButton(hass, client, coordinator, dev.serial))
@@ -42,7 +43,11 @@ async def _async_setup_cloud(
 
 def _set_call_status(coordinator, serial, status):
     data = dict(coordinator.data or {})
-    data[serial] = {**(data.get(serial) or {}), "status": status, "local_at": time.monotonic()}
+    data[serial] = {
+        **(data.get(serial) or {}),
+        "status": status,
+        "local_at": time.monotonic(),
+    }
     coordinator.async_set_updated_data(data)
 
 
@@ -183,7 +188,9 @@ class ChimeButton(ChimeEntity, ButtonEntity):
     def __init__(self, chime, key):
         super().__init__(chime, key)
         self.key = key
-        self._attr_icon = "mdi:bell-ring" if key == "play" else "mdi:stop-circle-outline"
+        self._attr_icon = (
+            "mdi:bell-ring" if key == "play" else "mdi:stop-circle-outline"
+        )
 
     async def async_press(self) -> None:
         if self.key == "play":

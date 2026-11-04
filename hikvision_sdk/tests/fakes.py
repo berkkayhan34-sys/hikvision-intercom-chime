@@ -43,7 +43,10 @@ class FakeSdk:
         self.on_audio(data)
 
     def send_voice(self, handle, frame):
-        if self.send_error_after is not None and len(self.frames) >= self.send_error_after:
+        if (
+            self.send_error_after is not None
+            and len(self.frames) >= self.send_error_after
+        ):
             raise SdkError("send voice", 12)
         self.frames.append(bytes(frame))
 

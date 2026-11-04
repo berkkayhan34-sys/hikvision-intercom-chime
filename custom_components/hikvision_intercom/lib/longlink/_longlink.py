@@ -39,11 +39,15 @@ def header(command: int, length: int) -> bytes:
             return bytes(out)
 
 
-def share_key(verification_code: bytes, subserial: bytes, uppercase_first: bool = True) -> bytes:
+def share_key(
+    verification_code: bytes, subserial: bytes, uppercase_first: bool = True
+) -> bytes:
     first = hashlib.md5(verification_code + subserial).hexdigest()
     if uppercase_first:
         first = first.upper()
-    second = hashlib.md5(first.encode() + b"www.88075998.com").hexdigest().upper().encode()
+    second = (
+        hashlib.md5(first.encode() + b"www.88075998.com").hexdigest().upper().encode()
+    )
     return hashlib.md5(second).hexdigest().upper().encode()
 
 
@@ -76,15 +80,25 @@ def decrypt(key: bytes, ciphertext: bytes) -> bytes:
         raise ValueError("Invalid padding") from error
 
 
-def authentication_i(subserial: bytes, shared: bytes, random_1: int, auth_mode: int = 2) -> bytes:
-    if not 0 < len(subserial) <= 127 or not 0 <= random_1 <= 255 or not 0 <= auth_mode <= 255:
+def authentication_i(
+    subserial: bytes, shared: bytes, random_1: int, auth_mode: int = 2
+) -> bytes:
+    if (
+        not 0 < len(subserial) <= 127
+        or not 0 <= random_1 <= 255
+        or not 0 <= auth_mode <= 255
+    ):
         raise ValueError("Invalid authentication fields")
-    payload = bytes([1, 3, 0, auth_mode, len(subserial)]) + subserial + bytes([random_1])
+    payload = (
+        bytes([1, 3, 0, auth_mode, len(subserial)]) + subserial + bytes([random_1])
+    )
     payload += signature(subserial + bytes([random_1]), shared)
     return header(1, len(payload)) + payload
 
 
-def authentication_ii(payload: bytes, subserial: bytes, shared: bytes, random_1: int) -> int:
+def authentication_ii(
+    payload: bytes, subserial: bytes, shared: bytes, random_1: int
+) -> int:
     """Validate the AUTH-II payload (outer command/header handled separately)."""
     if len(payload) < 4:
         raise ValueError("Truncated authentication response")
@@ -152,7 +166,10 @@ def das_request(subserial: bytes, session_key: bytes, mode: int = 4) -> bytes:
 
 
 def das_response(payload: bytes, session_key: bytes) -> dict[str, Any]:
-    if len(payload) < 20 or payload[:4] not in (b"\x01\x01\x00\x00", b"\x01\x00\x00\x00"):
+    if len(payload) < 20 or payload[:4] not in (
+        b"\x01\x01\x00\x00",
+        b"\x01\x00\x00\x00",
+    ):
         raise ValueError("Invalid DAS response")
     obj = json.loads(decrypt(session_key, payload[4:]))
     if not isinstance(obj, dict) or obj.get("Type") != "DAS":
@@ -162,7 +179,12 @@ def das_response(payload: bytes, session_key: bytes) -> dict[str, Any]:
         raise ValueError("Missing DAS information")
     for field, limit in [("Address", 63), ("Domain", 63), ("ServerID", 127)]:
         value = info.get(field)
-        if not isinstance(value, str) or not value or len(value.encode()) > limit or "\0" in value:
+        if (
+            not isinstance(value, str)
+            or not value
+            or len(value.encode()) > limit
+            or "\0" in value
+        ):
             raise ValueError("Invalid DAS text field")
     for field in ["Port", "UdpPort"]:
         if type(info.get(field)) is not int or not 0 <= info[field] <= 65535:
@@ -172,7 +194,9 @@ def das_response(payload: bytes, session_key: bytes) -> dict[str, Any]:
     return info
 
 
-def refresh_i(subserial: bytes, device_id: bytes, master: bytes, random_1: int) -> bytes:
+def refresh_i(
+    subserial: bytes, device_id: bytes, master: bytes, random_1: int
+) -> bytes:
     if len(device_id) != 32 or not 0 < len(subserial) <= 127:
         raise ValueError("Invalid identity")
     payload = (
@@ -187,9 +211,16 @@ def refresh_i(subserial: bytes, device_id: bytes, master: bytes, random_1: int) 
 
 
 def refresh_ii(payload: bytes, master: bytes, random_1: int) -> tuple[int, bytes]:
-    if len(payload) >= 4 and payload[:3] in (b"\x01\x01\x00", b"\x01\x00\x00") and payload[3]:
+    if (
+        len(payload) >= 4
+        and payload[:3] in (b"\x01\x01\x00", b"\x01\x00\x00")
+        and payload[3]
+    ):
         raise AuthenticationRejected(payload[3])
-    if len(payload) != 36 or payload[:4] not in (b"\x01\x01\x00\x00", b"\x01\x00\x00\x00"):
+    if len(payload) != 36 or payload[:4] not in (
+        b"\x01\x01\x00\x00",
+        b"\x01\x00\x00\x00",
+    ):
         raise ValueError("Invalid refresh response")
     plain = decrypt(master, payload[4:])
     if len(plain) != 18 or plain[0] != random_1:
@@ -265,7 +296,9 @@ def encode_application_ack(
     metadata = json.dumps(
         {"CmdVer": version, "Seq": sequence, "MsgType": 2}, separators=(",", ":")
     ).encode()
-    return f"/{domain}/{command}", encrypt(key, len(metadata).to_bytes(2, "big") + metadata + body)
+    return f"/{domain}/{command}", encrypt(
+        key, len(metadata).to_bytes(2, "big") + metadata + body
+    )
 
 
 def control_keepalive(body: bytes) -> int | None:

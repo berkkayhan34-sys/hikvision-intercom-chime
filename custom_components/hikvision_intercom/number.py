@@ -64,7 +64,9 @@ class HikVolumeNumber(CoordinatorEntity, NumberEntity):
 
     @property
     def native_value(self) -> float | None:
-        vols = ((self.coordinator.data or {}).get(self._serial) or {}).get("volumes") or {}
+        vols = ((self.coordinator.data or {}).get(self._serial) or {}).get(
+            "volumes"
+        ) or {}
         v = vols.get(self._kind)
         return None if v is None else float(v)
 
@@ -80,7 +82,9 @@ async def async_setup_entry(
 ) -> None:
     await _async_setup_cloud(hass, entry, async_add_entities)
     for chime in hass.data[DOMAIN][entry.entry_id]["chimes"].values():
-        async_add_entities([ChimeNumber(chime, "gain_db"), ChimeNumber(chime, "repeats")])
+        async_add_entities(
+            [ChimeNumber(chime, "gain_db"), ChimeNumber(chime, "repeats")]
+        )
 
 
 class ChimeNumber(ChimeEntity, NumberEntity):

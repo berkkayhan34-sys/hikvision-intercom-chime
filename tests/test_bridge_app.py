@@ -9,8 +9,13 @@ import pytest
 from custom_components.hikvision_intercom import bridge_app
 from custom_components.hikvision_intercom.validation import SetupError
 
-STATION = {"name": "st_192_168_0_60", "host": "192.168.0.60", "port": 8000,
-           "username": "admin", "password": "pw"}
+STATION = {
+    "name": "st_192_168_0_60",
+    "host": "192.168.0.60",
+    "port": 8000,
+    "username": "admin",
+    "password": "pw",
+}
 TOKEN = "k" * 40
 
 
@@ -28,8 +33,12 @@ class FakeAddons:
     async def addon_info(self, slug):
         if "info" in self.fail_on:
             raise self.fail_on["info"]
-        return SimpleNamespace(slug=slug, hostname=slug.replace("_", "-"), options=self.options,
-                               state="started" if self.running else "stopped")
+        return SimpleNamespace(
+            slug=slug,
+            hostname=slug.replace("_", "-"),
+            options=self.options,
+            state="started" if self.running else "stopped",
+        )
 
     async def set_addon_options(self, slug, options):
         if "set" in self.fail_on:
@@ -58,13 +67,19 @@ class FakeAddons:
 def addons(hass):
     hass.config.components.add("hassio")
     fake = FakeAddons({"token": TOKEN, "stations": []})
-    with patch.object(bridge_app, "_supervisor_client", return_value=SimpleNamespace(addons=fake)):
+    with patch.object(
+        bridge_app, "_supervisor_client", return_value=SimpleNamespace(addons=fake)
+    ):
         yield fake
 
 
 async def test_find_app_returns_hostname_options_and_state(hass, addons):
     app = await bridge_app.find_app(hass)
-    assert (app.slug, app.hostname, app.running) == ("a1b2c3d4_hikvision_sdk", "a1b2c3d4-hikvision-sdk", True)
+    assert (app.slug, app.hostname, app.running) == (
+        "a1b2c3d4_hikvision_sdk",
+        "a1b2c3d4-hikvision-sdk",
+        True,
+    )
     assert app.options["token"] == TOKEN
 
 
@@ -73,12 +88,21 @@ async def test_local_install_slug_is_recognised(hass, addons):
     assert (await bridge_app.find_app(hass)).slug == "local_hikvision_sdk"
 
 
-@pytest.mark.parametrize("installed, code", [
-    ([], "app_required"),
-    (["core_mosquitto", "aff2db71_hikvision_doorbell"], "app_required"),  # the old SDK app is not this one
-    (["xyz_hikvision_sdk"], "app_required"),
-    (["a1b2c3d4_hikvision_sdk", "e5f6a7b8_hikvision_sdk"], "app_ambiguous")])
-async def test_find_app_requires_exactly_one_matching_app(hass, addons, installed, code):
+@pytest.mark.parametrize(
+    "installed, code",
+    [
+        ([], "app_required"),
+        (
+            ["core_mosquitto", "aff2db71_hikvision_doorbell"],
+            "app_required",
+        ),  # the old SDK app is not this one
+        (["xyz_hikvision_sdk"], "app_required"),
+        (["a1b2c3d4_hikvision_sdk", "e5f6a7b8_hikvision_sdk"], "app_ambiguous"),
+    ],
+)
+async def test_find_app_requires_exactly_one_matching_app(
+    hass, addons, installed, code
+):
     addons.installed = installed
     with pytest.raises(SetupError) as error:
         await bridge_app.find_app(hass)
@@ -133,7 +157,9 @@ async def test_failed_restart_restores_the_previous_options(hass, addons):
     assert addons.actions == ["set", "restart", "set", "restart"]
 
 
-async def test_restart_failing_again_during_restore_is_reported_as_rollback_failure(hass, addons):
+async def test_restart_failing_again_during_restore_is_reported_as_rollback_failure(
+    hass, addons
+):
     addons.fail_on["restart"] = RuntimeError("boom")
     with pytest.raises(SetupError) as error:
         await bridge_app.configure_station(hass, STATION)
@@ -166,7 +192,10 @@ async def test_remove_station_drops_only_that_station(hass, addons):
     other = dict(STATION, name="other", host="192.168.0.9")
     addons.options = {"token": TOKEN, "stations": [STATION, other]}
     await bridge_app.remove_station(hass, STATION["name"])
-    assert addons.options["stations"] == [other] and addons.actions == ["set", "restart"]
+    assert addons.options["stations"] == [other] and addons.actions == [
+        "set",
+        "restart",
+    ]
 
 
 async def test_remove_unknown_station_is_a_no_op(hass, addons):

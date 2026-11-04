@@ -26,9 +26,7 @@ async def async_setup_entry(
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
     client = data["client"]
-    names = {
-        (c.serial, c.channel): c.name for c in data["cameras"]
-    }
+    names = {(c.serial, c.channel): c.name for c in data["cameras"]}
     entities = []
     for dev in data["devices"]:
         for channel, count in sorted(dev.locks.items()):

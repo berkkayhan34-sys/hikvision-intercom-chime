@@ -7,9 +7,9 @@ The phone side is Home Assistant's Assist microphone (16 kHz, 16-bit mono PCM); 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterable, AsyncIterator
 import math
 import struct
+from collections.abc import AsyncIterable, AsyncIterator
 
 SAMPLES_PER_FRAME = 160
 FRAME_SECONDS = SAMPLES_PER_FRAME / 8000
@@ -43,14 +43,20 @@ def mulaw_encode(samples) -> bytes:
 
 def mulaw_to_pcm16le(data: bytes) -> bytes:
     """mu-law bytes to little-endian signed 16-bit PCM (twice as long)."""
-    table = [_DECODE[i:i + 2] for i in range(0, 512, 2)]
+    table = [_DECODE[i : i + 2] for i in range(0, 512, 2)]
     return b"".join(table[b] for b in data)
 
 
 def wav_header(sample_rate: int = 8000) -> bytes:
     """A WAV header for a stream of unknown length (sizes at their maximum), 16-bit mono PCM."""
-    return (b"RIFF" + struct.pack("<I", 0xFFFFFFFF) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, sample_rate, sample_rate * 2, 2, 16)
-            + b"data" + struct.pack("<I", 0xFFFFFFFF))
+    return (
+        b"RIFF"
+        + struct.pack("<I", 0xFFFFFFFF)
+        + b"WAVEfmt "
+        + struct.pack("<IHHIIHH", 16, 1, 1, sample_rate, sample_rate * 2, 2, 16)
+        + b"data"
+        + struct.pack("<I", 0xFFFFFFFF)
+    )
 
 
 def _lowpass_taps(count: int, cutoff: float) -> tuple[float, ...]:
@@ -58,13 +64,17 @@ def _lowpass_taps(count: int, cutoff: float) -> tuple[float, ...]:
     taps = []
     for n in range(count):
         x = n - middle
-        sinc = 2 * cutoff if x == 0 else math.sin(2 * math.pi * cutoff * x) / (math.pi * x)
+        sinc = (
+            2 * cutoff if x == 0 else math.sin(2 * math.pi * cutoff * x) / (math.pi * x)
+        )
         taps.append(sinc * (0.54 - 0.46 * math.cos(2 * math.pi * n / (count - 1))))
     total = sum(taps)
     return tuple(tap / total for tap in taps)
 
 
-_TAPS = _lowpass_taps(21, 3600 / 16000)  # speech band kept; nothing above the new 4 kHz limit folds back
+_TAPS = _lowpass_taps(
+    21, 3600 / 16000
+)  # speech band kept; nothing above the new 4 kHz limit folds back
 
 
 class Downsampler:
@@ -86,7 +96,7 @@ class Downsampler:
             acc = sum(tap * window[index + t] for t, tap in enumerate(_TAPS))
             out.append(max(-32768, min(32767, round(acc))))
         self._seen += len(incoming)
-        self._history = window[len(window) - (len(_TAPS) - 1):]
+        self._history = window[len(window) - (len(_TAPS) - 1) :]
         return out
 
 

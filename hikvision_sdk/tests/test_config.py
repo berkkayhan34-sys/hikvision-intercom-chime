@@ -5,8 +5,13 @@ import pytest
 from hik_sdk_bridge import config
 
 TOKEN = "t" * 40
-STATION = {"name": "hall", "host": "192.168.0.50", "port": 8000,
-           "username": "admin", "password": "secret-pass"}
+STATION = {
+    "name": "hall",
+    "host": "192.168.0.50",
+    "port": 8000,
+    "username": "admin",
+    "password": "secret-pass",
+}
 
 
 def test_valid_options():
@@ -20,12 +25,25 @@ def test_secrets_are_not_in_repr():
     assert "secret-pass" not in repr(parsed) and TOKEN not in repr(parsed)
 
 
-@pytest.mark.parametrize("change", [
-    {"name": "Bad Name"}, {"name": ""}, {"name": "../x"},
-    {"host": "8.8.8.8"}, {"host": "example.com"}, {"host": "192.168.0.999"},
-    {"port": 0}, {"port": 70000}, {"port": True}, {"port": "8000"},
-    {"username": ""}, {"password": ""}, {"password": "x" * 65}, {"password": "a\nb"},
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"name": "Bad Name"},
+        {"name": ""},
+        {"name": "../x"},
+        {"host": "8.8.8.8"},
+        {"host": "example.com"},
+        {"host": "192.168.0.999"},
+        {"port": 0},
+        {"port": 70000},
+        {"port": True},
+        {"port": "8000"},
+        {"username": ""},
+        {"password": ""},
+        {"password": "x" * 65},
+        {"password": "a\nb"},
+    ],
+)
 def test_invalid_station_is_rejected(change):
     with pytest.raises(config.ConfigError):
         config.parse({"token": TOKEN, "stations": [dict(STATION, **change)]})

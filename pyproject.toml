@@ -2,3 +2,14 @@
 testpaths = ["tests", "hikvision_sdk/tests"]
 pythonpath = ["hikvision_sdk/src"]
 asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py314"
+extend-exclude = ["licenses"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
+ignore = ["E501", "RUF012", "SIM117", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components", "hik_sdk_bridge"]

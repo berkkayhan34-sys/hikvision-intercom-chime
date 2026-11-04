@@ -7,8 +7,8 @@ answers with a fixed text for the conversation step to acknowledge.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterable
 import logging
+from collections.abc import AsyncIterable
 
 from homeassistant.components.stt import (
     AudioBitRates,
@@ -64,10 +64,14 @@ class DoorTalkSpeechToText(SpeechToTextEntity):
     def supported_channels(self) -> list[AudioChannels]:
         return [AudioChannels.CHANNEL_MONO]
 
-    async def async_process_audio_stream(self, metadata: SpeechMetadata, stream: AsyncIterable[bytes]) -> SpeechResult:
+    async def async_process_audio_stream(
+        self, metadata: SpeechMetadata, stream: AsyncIterable[bytes]
+    ) -> SpeechResult:
         try:
             await self._door_call.talk(stream)
         except BridgeError as error:
-            _LOGGER.warning("Could not talk into the door call: %s", error.code)  # a fixed code, nothing else
+            _LOGGER.warning(
+                "Could not talk into the door call: %s", error.code
+            )  # a fixed code, nothing else
             return SpeechResult(None, SpeechResultState.ERROR)
         return SpeechResult(SENT_TEXT, SpeechResultState.SUCCESS)

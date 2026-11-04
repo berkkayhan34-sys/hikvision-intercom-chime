@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import ipaddress
 import json
-from pathlib import Path
 import re
+from dataclasses import dataclass, field
+from pathlib import Path
 
 OPTIONS_PATH = Path("/data/options.json")
 _NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
@@ -33,9 +33,12 @@ class Config:
 
 
 def _credential(value: object, field_name: str) -> str:
-    if (not isinstance(value, str) or not value
-            or len(value.encode("utf8")) > 64
-            or any(ord(character) < 32 for character in value)):
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value.encode("utf8")) > 64
+        or any(ord(character) < 32 for character in value)
+    ):
         raise ConfigError(f"invalid {field_name}")
     return value
 
@@ -46,16 +49,20 @@ def parse_station(raw: dict) -> StationConfig:
         raise ConfigError("invalid station name")
     try:
         address = ipaddress.IPv4Address(raw.get("host"))
-    except (ipaddress.AddressValueError, TypeError):
+    except ipaddress.AddressValueError, TypeError:
         raise ConfigError("invalid station host") from None
     if not any(address in ipaddress.IPv4Network(net) for net in _PRIVATE):
         raise ConfigError("station host must be a private LAN address")
     port = raw.get("port", 8000)
     if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
         raise ConfigError("invalid station port")
-    return StationConfig(name, str(address), port,
-                         _credential(raw.get("username"), "station username"),
-                         _credential(raw.get("password"), "station password"))
+    return StationConfig(
+        name,
+        str(address),
+        port,
+        _credential(raw.get("username"), "station username"),
+        _credential(raw.get("password"), "station password"),
+    )
 
 
 def parse(raw: dict) -> Config:
@@ -71,7 +78,7 @@ def parse(raw: dict) -> Config:
 def load(path: Path = OPTIONS_PATH) -> Config:
     try:
         raw = json.loads(path.read_text("utf8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         raise ConfigError("options file unreadable") from None
     if not isinstance(raw, dict):
         raise ConfigError("options file malformed")

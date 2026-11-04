@@ -17,9 +17,17 @@ def encode(value: int) -> int:
     return pcm16le_to_mulaw(struct.pack("<h", value))[0]
 
 
-@pytest.mark.parametrize("value, expected", [
-    (0, 0xFF), (-1, 0x7F), (32767, 0x80), (-32768, 0x00), (1000, 0xCE), (-1000, 0x4E),
-])
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (0, 0xFF),
+        (-1, 0x7F),
+        (32767, 0x80),
+        (-32768, 0x00),
+        (1000, 0xCE),
+        (-1000, 0x4E),
+    ],
+)
 def test_known_values(value, expected):
     assert encode(value) == expected
 

@@ -6,10 +6,10 @@ files are written by the library and credential objects suppress their repr.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
 import hashlib
 import secrets
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from . import _longlink as wire
@@ -20,6 +20,7 @@ class Exchange(Protocol):
     def exchange(self, frame: bytes) -> tuple[int, bytes]:
         """Send a frame and read one response."""
         raise NotImplementedError
+
     def send(self, frame: bytes) -> None:
         """Send a frame without waiting for a response."""
         raise NotImplementedError
@@ -48,7 +49,9 @@ def authenticate(
     """
     identity = hashlib.sha256(serial).hexdigest()
     if state.get("identity", identity) != identity:
-        raise EzvizPushFatalError("Push state belongs to a different client identity; recovery required")
+        raise EzvizPushFatalError(
+            "Push state belongs to a different client identity; recovery required"
+        )
     session_hash = hashlib.sha256(session_token.encode()).hexdigest()
     if "device_id" in state:
         device = _saved_key(state["device_id"], 32, "device identity")
@@ -69,29 +72,40 @@ def authenticate(
                     f"Cached push credentials rejected (status {error.status}); recovery required"
                 ) from error
     elif state:
-        raise EzvizPushFatalError("Saved push state has no device identity; recovery required")
+        raise EzvizPushFatalError(
+            "Saved push state has no device identity; recovery required"
+        )
     else:
         device = None
 
     # EZVIZ protocol requires this MD5-derived input; it is not a storage hash.
     # Changing the digest breaks compatibility with the remote authentication peer.
-    shared = wire.share_key(hashlib.md5(session_token.encode()).hexdigest().encode(), serial)
+    shared = wire.share_key(
+        hashlib.md5(session_token.encode()).hexdigest().encode(), serial
+    )
     n1, n3 = secrets.token_bytes(2)
     try:
         n2 = wire.authentication_ii(
-            _response(connection, wire.authentication_i(serial, shared, n1), 2), serial, shared, n1
+            _response(connection, wire.authentication_i(serial, shared, n1), 2),
+            serial,
+            shared,
+            n1,
         )
         if device is None:
             pending = dict(state, identity=identity, phase="creation_pending")
             save(pending)
             state.update(pending)
-            payload = _response(connection, wire.authentication_iii_create(serial, shared, n2, n3), 6)
+            payload = _response(
+                connection, wire.authentication_iii_create(serial, shared, n2, n3), 6
+            )
             device, master, session = wire.authentication_iv_create(
                 payload, serial, shared, bytes([n1, n2, n3])
             )
         else:
             payload = _response(
-                connection, wire.authentication_iii_existing(serial, shared, device, n2, n3), 5
+                connection,
+                wire.authentication_iii_existing(serial, shared, device, n2, n3),
+                5,
             )
             master, session = wire.authentication_iv_existing(
                 payload, serial, shared, bytes([n1, n2, n3])
@@ -118,7 +132,9 @@ def _saved_key(value: Any, size: int, label: str) -> bytes:
     try:
         result = bytes.fromhex(value)
     except ValueError as error:
-        raise EzvizPushFatalError(f"Invalid saved push {label}; recovery required") from error
+        raise EzvizPushFatalError(
+            f"Invalid saved push {label}; recovery required"
+        ) from error
     if len(result) != size:
         raise EzvizPushFatalError(f"Invalid saved push {label}; recovery required")
     return result
@@ -138,7 +154,9 @@ def _redirect(
     return PushCredentials(device, master, session, wire.das_response(payload, session))
 
 
-def _cached(connection: Exchange, serial: bytes, device: bytes, master: bytes) -> PushCredentials:
+def _cached(
+    connection: Exchange, serial: bytes, device: bytes, master: bytes
+) -> PushCredentials:
     nonce = secrets.randbelow(256)
     payload = _response(connection, wire.refresh_i(serial, device, master, nonce), 8)
     n2, session = wire.refresh_ii(payload, master, nonce)

@@ -24,15 +24,31 @@ async def test_broadcast_posts_raw_pcm_and_returns_the_duration(client, aioclien
     aioclient_mock.post(f"{STATION_URL}/broadcast", status=202, json={"duration": 1.5})
     assert await client.broadcast(STATION_NAME, b"\x00\x01" * 10) == 1.5
     _, _, body, headers = aioclient_mock.mock_calls[0]
-    assert body == b"\x00\x01" * 10 and headers["Content-Type"] == "application/octet-stream"
+    assert (
+        body == b"\x00\x01" * 10
+        and headers["Content-Type"] == "application/octet-stream"
+    )
 
 
-@pytest.mark.parametrize("status, payload, code", [
-    (401, {}, "app_unauthorized"), (404, {}, "station_unknown"), (503, {}, "station_offline"),
-    (400, {}, "invalid_audio"), (413, {}, "invalid_audio"), (500, {}, "app_error"),
-    (409, {"error": "call_active"}, "call_active"), (409, {"error": "busy"}, "busy"),
-    (409, {"error": "<script>"}, "app_error"), (409, [], "app_error"), (418, {"error": "x"}, "app_error")])
-async def test_http_failures_map_to_fixed_codes(client, aioclient_mock, status, payload, code):
+@pytest.mark.parametrize(
+    "status, payload, code",
+    [
+        (401, {}, "app_unauthorized"),
+        (404, {}, "station_unknown"),
+        (503, {}, "station_offline"),
+        (400, {}, "invalid_audio"),
+        (413, {}, "invalid_audio"),
+        (500, {}, "app_error"),
+        (409, {"error": "call_active"}, "call_active"),
+        (409, {"error": "busy"}, "busy"),
+        (409, {"error": "<script>"}, "app_error"),
+        (409, [], "app_error"),
+        (418, {"error": "x"}, "app_error"),
+    ],
+)
+async def test_http_failures_map_to_fixed_codes(
+    client, aioclient_mock, status, payload, code
+):
     aioclient_mock.get(STATION_URL, status=status, json=payload)
     with pytest.raises(BridgeError) as error:
         await client.status(STATION_NAME)
@@ -40,7 +56,9 @@ async def test_http_failures_map_to_fixed_codes(client, aioclient_mock, status, 
     assert TOKEN not in str(error.value) and APP_HOST not in str(error.value)
 
 
-@pytest.mark.parametrize("failure", [aiohttp.ClientError(), TimeoutError(), aiohttp.ClientConnectionError()])
+@pytest.mark.parametrize(
+    "failure", [aiohttp.ClientError(), TimeoutError(), aiohttp.ClientConnectionError()]
+)
 async def test_transport_failures_are_unreachable(client, aioclient_mock, failure):
     aioclient_mock.get(STATION_URL, exc=failure)
     with pytest.raises(BridgeError) as error:

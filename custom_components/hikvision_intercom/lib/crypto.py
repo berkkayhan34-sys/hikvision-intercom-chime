@@ -13,13 +13,13 @@ See docs/cpd7-stream-recipe/07-CRYPTO-INTERNALS.md for the full algorithm.
 import base64
 import struct
 
-from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
-
+from cryptography.hazmat.primitives.asymmetric import ec
 
 # ---------------------------------------------------------------------------
 # ECDH P-256 keypair generation
 # ---------------------------------------------------------------------------
+
 
 def generate_ecdh_keypair():
     """Generate ephemeral ECDH P-256 keypair.
@@ -42,20 +42,20 @@ def generate_ecdh_keypair():
 # ---------------------------------------------------------------------------
 
 ECDH_MAGIC = 0x24  # '$'
-ECDH_TYPE_REQ = 0x01   # handshake (carries camera pubkey + encrypted session key)
+ECDH_TYPE_REQ = 0x01  # handshake (carries camera pubkey + encrypted session key)
 ECDH_TYPE_DATA = 0x02  # data (ChaCha20-encrypted payload)
 
 # Offsets within the packet (relative to first byte after '$')
 # These match the layout emitted by encECDHReqPackage / encECDHDataPackage.
 OFF_TYPE = 1
 OFF_HEADER_LEN = 2
-OFF_PAYLOAD_LEN = 3    # 2 bytes BE-on-wire (after byteswap via enc function)
+OFF_PAYLOAD_LEN = 3  # 2 bytes BE-on-wire (after byteswap via enc function)
 OFF_MARKER = 5
 OFF_SUBTYPE = 6
-OFF_NONCE_RAW = 7      # 4 bytes
-OFF_ENCRYPTED_KEY = 0x0B   # 32 bytes (two AES-256-ECB blocks)
-OFF_PEER_PUBKEY = 0x2B     # 91 bytes (DER SubjectPublicKeyInfo P-256)
-HEADER_FIXED = 0x86        # end of fixed header area
+OFF_NONCE_RAW = 7  # 4 bytes
+OFF_ENCRYPTED_KEY = 0x0B  # 32 bytes (two AES-256-ECB blocks)
+OFF_PEER_PUBKEY = 0x2B  # 91 bytes (DER SubjectPublicKeyInfo P-256)
+HEADER_FIXED = 0x86  # end of fixed header area
 
 # Trailer layout (after optional payload at offset HEADER_FIXED):
 #   CRC32(0x00..HEADER_FIXED)  : 4 bytes
@@ -73,6 +73,7 @@ TRAILER_SIZE = 4 + 4 + 32  # 40 bytes
 # Nonce transformation
 # ---------------------------------------------------------------------------
 
+
 def transform_nonce(nonce_raw_4b: bytes) -> bytes:
     """Apply the two swap operations to convert wire nonce → ChaCha20 nonce.
 
@@ -86,10 +87,10 @@ def transform_nonce(nonce_raw_4b: bytes) -> bytes:
 
     Returns 4-byte bytes object suitable for ChaCha20 nonce prefix.
     """
-    u32 = struct.unpack('<I', nonce_raw_4b)[0]
+    u32 = struct.unpack("<I", nonce_raw_4b)[0]
     u32 = ((u32 & 0xFF00FF00) >> 8) | ((u32 & 0x00FF00FF) << 8)
     u32 = (u32 >> 16) | ((u32 & 0xFFFF) << 16) & 0xFFFFFFFF
-    return struct.pack('<I', u32)
+    return struct.pack("<I", u32)
 
 
 # ---------------------------------------------------------------------------

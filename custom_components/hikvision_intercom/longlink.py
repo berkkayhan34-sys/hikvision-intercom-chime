@@ -46,7 +46,7 @@ class LongLinkError(Exception):
 
 
 def long_link_feature_code(account: str) -> str:
-    return hashlib.md5(f"hikconnect_intercom:{account}".encode("utf-8")).hexdigest()
+    return hashlib.md5(f"hikconnect_intercom:{account}".encode()).hexdigest()
 
 
 class HikConnectLongLink:
@@ -81,7 +81,9 @@ class HikConnectLongLink:
     async def async_start(self) -> None:
         state = await self._store.async_load() or {}
         await self._hass.async_add_executor_job(self._login)
-        serial = f"MOBILE:{_APP_TYPE}:{self._user_id}:{self._feature_code}".encode("ascii")
+        serial = f"MOBILE:{_APP_TYPE}:{self._user_id}:{self._feature_code}".encode(
+            "ascii"
+        )
         self._worker = PushWorker(
             lambda: Channel99Session(
                 self._endpoint,
@@ -121,11 +123,19 @@ class HikConnectLongLink:
         self._user_id = str(j["loginUser"]["userId"])
         self._http.headers["sessionId"] = self._session_id
         self._logged_in_at = time.monotonic()
-        info = self._request("GET", "/v3/configurations/system/info")["systemConfigInfo"]
+        info = self._request("GET", "/v3/configurations/system/info")[
+            "systemConfigInfo"
+        ]
         self._endpoint = (info["pushDasDomain"], int(info["pushDasPort"]))
-        reg = self._request("PUT", "/v3/push/token", data={"pushRegisterJson": _REGISTRATION["pushRegisterJson"]})
+        reg = self._request(
+            "PUT",
+            "/v3/push/token",
+            data={"pushRegisterJson": _REGISTRATION["pushRegisterJson"]},
+        )
         if (reg.get("meta") or {}).get("code") != 200:
-            raise LongLinkError(f"channel-99 registration rejected (meta {reg.get('meta')})")
+            raise LongLinkError(
+                f"channel-99 registration rejected (meta {reg.get('meta')})"
+            )
 
     def _prepare(self) -> None:
         if time.monotonic() - self._logged_in_at > _SESSION_MAX_AGE:
@@ -136,7 +146,9 @@ class HikConnectLongLink:
         try:
             return r.json()
         except ValueError as err:
-            raise LongLinkError(f"{method} {path}: non-JSON reply ({r.status_code})") from err
+            raise LongLinkError(
+                f"{method} {path}: non-JSON reply ({r.status_code})"
+            ) from err
 
     def _save(self, snapshot: dict[str, Any]) -> None:
         asyncio.run_coroutine_threadsafe(

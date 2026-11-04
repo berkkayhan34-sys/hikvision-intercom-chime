@@ -30,34 +30,52 @@ async def async_setup_entry(
     for dev in data["devices"]:
         entities.append(
             HikBinary(
-                coordinator, dev.serial, "connectivity", "Connectivity",
+                coordinator,
+                dev.serial,
+                "connectivity",
+                "Connectivity",
                 lambda s: s.get("online"),
-                BinarySensorDeviceClass.CONNECTIVITY, EntityCategory.DIAGNOSTIC,
+                BinarySensorDeviceClass.CONNECTIVITY,
+                EntityCategory.DIAGNOSTIC,
             )
         )
         entities.append(
             HikBinary(
-                coordinator, dev.serial, "update", "Firmware update",
+                coordinator,
+                dev.serial,
+                "update",
+                "Firmware update",
                 lambda s: s.get("upgrade_available"),
-                BinarySensorDeviceClass.UPDATE, EntityCategory.DIAGNOSTIC,
+                BinarySensorDeviceClass.UPDATE,
+                EntityCategory.DIAGNOSTIC,
             )
         )
         if dev.locks:
             entities.append(
                 HikBinary(
-                    coordinator, dev.serial, "door_station_link", "Door station link",
+                    coordinator,
+                    dev.serial,
+                    "door_station_link",
+                    "Door station link",
                     _door_station_link,
-                    BinarySensorDeviceClass.CONNECTIVITY, EntityCategory.DIAGNOSTIC,
+                    BinarySensorDeviceClass.CONNECTIVITY,
+                    EntityCategory.DIAGNOSTIC,
                 )
             )
         status = (coordinator.data or {}).get(dev.serial) or {}
         if status.get("disk_present"):
             entities.append(
                 HikBinary(
-                    coordinator, dev.serial, "disk", "Storage health",
+                    coordinator,
+                    dev.serial,
+                    "disk",
+                    "Storage health",
                     # PROBLEM: on == problem, so invert disk_ok
-                    lambda s: (not s["disk_ok"]) if s.get("disk_ok") is not None else None,
-                    BinarySensorDeviceClass.PROBLEM, EntityCategory.DIAGNOSTIC,
+                    lambda s: (
+                        (not s["disk_ok"]) if s.get("disk_ok") is not None else None
+                    ),
+                    BinarySensorDeviceClass.PROBLEM,
+                    EntityCategory.DIAGNOSTIC,
                 )
             )
     async_add_entities(entities)
@@ -66,7 +84,9 @@ async def async_setup_entry(
 class HikBinary(CoordinatorEntity, BinarySensorEntity):
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, serial, key, name, value_fn, device_class, category):
+    def __init__(
+        self, coordinator, serial, key, name, value_fn, device_class, category
+    ):
         super().__init__(coordinator)
         self._serial = serial
         self._value_fn = value_fn
