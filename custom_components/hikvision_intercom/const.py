@@ -71,6 +71,8 @@ def call_signal(serial: str) -> str:
 
 # --- Local stations (config subentries) and the SDK bridge app ------------------
 SUBENTRY_STATION = "station"
+DEFAULT_STATION_TITLE = "Doorbell chime"
+APP_REPOSITORY_URL = "https://github.com/berkkayhan34-sys/hikvision-intercom-chime"
 APP_SLUG_SUFFIX = "hikvision_sdk"  # repository slug prefix varies; local installs use "local"
 APP_PORT = 8099
 DEFAULT_SDK_PORT = 8000

@@ -32,6 +32,17 @@ The Hik-Connect account is the config entry. Each local station is a subentry of
 password goes to the app's Supervisor options and nowhere else. Adding or removing a
 subentry reloads the entry; changing sound settings does not.
 
+The initial flow is one path: bridge-app check (an install prompt that re-checks on Submit;
+Container installs abort), Hik-Connect login, station, restart confirmation, then the entry
+is created together with its station subentry.
+
+Chime entities belong to the config entry, not the subentry, and use the cloud device's
+identifiers when the account has exactly one device and one station, so the doorbell is one
+device. Attaching them to the subentry would list the shared device under it as well. The
+cost: removing a station deletes its entities explicitly (`_async_forget_stations`) instead
+of relying on Home Assistant. A separate chime device from an earlier version is removed
+once its entities have moved.
+
 ## Decision C - new domain
 
 The merged integration is `hikvision_intercom`. Reusing the old domain

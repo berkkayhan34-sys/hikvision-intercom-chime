@@ -1,4 +1,5 @@
-"""Config flow: Hik-Connect account, plus one subentry per local indoor station."""
+"""Config flow: one setup path (bridge app, Hik-Connect account, local station) and a
+station subentry per indoor station for later additions and the chime sound."""
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ from typing import Any
 import probatio as vol
 from homeassistant.config_entries import (
     ConfigEntry,
+    ConfigSubentryData,
     ConfigFlow,
     ConfigFlowResult,
     ConfigSubentryFlow,
@@ -34,6 +36,7 @@ from .audio import AudioError
 from .bridge_app import configure_station, find_app
 
 from .const import (
+    APP_REPOSITORY_URL,
     CALL_POLL_INTERVAL,
     CONF_ACCOUNT,
     CONF_BASE_URL,
@@ -43,6 +46,7 @@ from .const import (
     CONF_SERVER,
     DEFAULT_BASE_URL,
     DEFAULT_GAIN,
+    DEFAULT_STATION_TITLE,
     DEFAULT_REPEATS,
     DEFAULT_SDK_PORT,
     DOMAIN,
@@ -96,6 +100,46 @@ def _schema(account: str, server: str, base_url: str, password_optional: bool) -
     )
 
 
+def _port(value) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not float(value).is_integer():
+        raise SetupError("invalid_port")
+    return int(value)
+
+
+def _station_fields(title_default: str | None) -> dict:
+    fields: dict = {}
+    if title_default is not None:
+        fields[vol.Required("title", default=title_default)] = TextSelector()
+    fields.update({
+        vol.Required("host"): TextSelector(),
+        vol.Required("port", default=DEFAULT_SDK_PORT): NumberSelector(
+            NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)),
+        vol.Required("username", default="admin"): TextSelector(),
+        vol.Required("password"): TextSelector(
+            TextSelectorConfig(type=TextSelectorType.PASSWORD)),
+    })
+    return fields
+
+
+def _checked_station(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Validate the station form and add the app-side name. Raises SetupError."""
+    station = dict(user_input, port=_port(user_input["port"]))
+    validate_station(station["host"], station["port"], station["username"], station["password"])
+    station["name"] = station_name(station["host"])
+    return station
+
+
+def _station_unique_id(station: dict[str, Any]) -> str:
+    return f"{station['host']}:{station['port']}"
+
+
+def _station_data(station: dict[str, Any]) -> dict[str, Any]:
+    # The password lives only in the app's options, never in the entry.
+    data = {key: station[key] for key in ("name", "host", "port", "username")}
+    data.update(gain_db=DEFAULT_GAIN, repeats=DEFAULT_REPEATS)
+    return data
+
+
 class HikConnectLocalConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle the Hik-Connect account login."""
 
@@ -111,7 +155,50 @@ class HikConnectLocalConfigFlow(ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         return HikConnectOptionsFlow()
 
+    _account: dict[str, Any] | None = None
+    _station: dict[str, Any] | None = None
+
     async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """The SDK bridge app comes first: without it the chime cannot work."""
+        try:
+            await find_app(self.hass)
+        except SetupError as error:
+            if str(error) == "supervisor_required":
+                return self.async_abort(reason="supervisor_required")
+            return await self.async_step_app(error=str(error))
+        return await self.async_step_account()
+
+    async def async_step_app(
+        self, user_input: dict[str, Any] | None = None, error: str | None = None
+    ) -> ConfigFlowResult:
+        """Ask for the app to be installed; Submit checks again."""
+        errors: dict[str, str] = {}
+        if error is not None:
+            errors["base"] = error
+        elif user_input is not None:
+            try:
+                await find_app(self.hass)
+            except SetupError as failure:
+                if str(failure) == "supervisor_required":
+                    return self.async_abort(reason="supervisor_required")
+                errors["base"] = str(failure)
+            else:
+                return await self.async_step_account()
+        return self.async_show_form(
+            step_id="app",
+            data_schema=vol.Schema({}),
+            errors=errors,
+            description_placeholders={
+                "repository_url": APP_REPOSITORY_URL,
+                "add_repository_link": (
+                    "https://my.home-assistant.io/redirect/supervisor_add_addon_repository/"
+                    f"?repository_url={APP_REPOSITORY_URL}"),
+            },
+        )
+
+    async def async_step_account(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
@@ -132,18 +219,74 @@ class HikConnectLocalConfigFlow(ConfigFlow, domain=DOMAIN):
                 else:
                     await self.async_set_unique_id(user_input[CONF_ACCOUNT].lower())
                     self._abort_if_unique_id_configured()
-                    return self.async_create_entry(
-                        title=user_input[CONF_ACCOUNT],
-                        data={
-                            CONF_ACCOUNT: user_input[CONF_ACCOUNT],
-                            CONF_PASSWORD: user_input[CONF_PASSWORD],
-                            CONF_BASE_URL: base_url,
-                        },
-                    )
+                    self._account = {
+                        CONF_ACCOUNT: user_input[CONF_ACCOUNT],
+                        CONF_PASSWORD: user_input[CONF_PASSWORD],
+                        CONF_BASE_URL: base_url,
+                    }
+                    return await self.async_step_station()
         return self.async_show_form(
-            step_id="user",
+            step_id="account",
             data_schema=_schema("", DEFAULT_BASE_URL, "", password_optional=False),
             errors=errors,
+        )
+
+    async def async_step_station(
+        self, user_input: dict[str, Any] | None = None, error: str | None = None
+    ) -> ConfigFlowResult:
+        """The local indoor station that plays the chime."""
+        if self._account is None:
+            return self.async_abort(reason="setup_expired")
+        errors: dict[str, str] = {}
+        if error is not None:
+            errors["base"] = error
+        elif user_input is not None:
+            try:
+                self._station = _checked_station(user_input)
+            except SetupError as failure:
+                errors["base"] = str(failure)
+            else:
+                return await self.async_step_confirm()
+        return self.async_show_form(
+            step_id="station",
+            data_schema=vol.Schema(_station_fields(None)),
+            errors=errors,
+        )
+
+    async def async_step_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        station, account = self._station, self._account
+        if station is None or account is None:
+            return self.async_abort(reason="setup_expired")
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if not user_input.get("confirm_restart"):
+                errors["base"] = "confirmation_required"
+            else:
+                try:
+                    await configure_station(self.hass, station)
+                except SetupError as failure:
+                    # Nothing was created; the password is dropped and asked for again.
+                    station.pop("password", None)
+                    self._station = None
+                    return await self.async_step_station(error=str(failure))
+                data = _station_data(station)
+                unique_id = _station_unique_id(station)
+                station.pop("password", None)
+                self._station = None
+                return self.async_create_entry(
+                    title=account[CONF_ACCOUNT],
+                    data=account,
+                    subentries=[ConfigSubentryData(
+                        subentry_type=SUBENTRY_STATION, title=DEFAULT_STATION_TITLE,
+                        unique_id=unique_id, data=data)],
+                )
+        return self.async_show_form(
+            step_id="confirm",
+            errors=errors,
+            data_schema=vol.Schema({
+                vol.Required("confirm_restart", default=False): BooleanSelector()}),
         )
 
     async def async_step_reconfigure(
@@ -232,12 +375,6 @@ class HikConnectOptionsFlow(OptionsFlow):
         )
 
 
-def _port(value) -> int:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not float(value).is_integer():
-        raise SetupError("invalid_port")
-    return int(value)
-
-
 class StationSubentryFlow(ConfigSubentryFlow):
     """Add a local indoor station for the doorbell chime, or change its sound."""
 
@@ -257,13 +394,10 @@ class StationSubentryFlow(ConfigSubentryFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                station = dict(user_input, port=_port(user_input["port"]))
-                validate_station(station["host"], station["port"],
-                                 station["username"], station["password"])
-                unique_id = f"{station['host']}:{station['port']}"
+                station = _checked_station(user_input)
+                unique_id = _station_unique_id(station)
                 if any(sub.unique_id == unique_id for sub in self._get_entry().subentries.values()):
                     return self.async_abort(reason="already_configured")
-                station["name"] = station_name(station["host"])
                 self._pending = station
                 return await self.async_step_confirm()
             except SetupError as error:
@@ -271,15 +405,7 @@ class StationSubentryFlow(ConfigSubentryFlow):
         return self.async_show_form(
             step_id="connection",
             errors=errors,
-            data_schema=vol.Schema({
-                vol.Required("title", default="Doorbell chime"): TextSelector(),
-                vol.Required("host"): TextSelector(),
-                vol.Required("port", default=DEFAULT_SDK_PORT): NumberSelector(
-                    NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)),
-                vol.Required("username", default="admin"): TextSelector(),
-                vol.Required("password"): TextSelector(
-                    TextSelectorConfig(type=TextSelectorType.PASSWORD)),
-            }),
+            data_schema=vol.Schema(_station_fields(DEFAULT_STATION_TITLE)),
         )
 
     async def async_step_confirm(
@@ -298,12 +424,9 @@ class StationSubentryFlow(ConfigSubentryFlow):
                 except SetupError as error:
                     errors["base"] = str(error)
                 else:
-                    # The password lives only in the app's options, never in the entry.
-                    data = {key: station[key] for key in ("name", "host", "port", "username")}
-                    data.update(gain_db=DEFAULT_GAIN, repeats=DEFAULT_REPEATS)
                     return self.async_create_entry(
-                        title=station["title"], data=data,
-                        unique_id=f"{station['host']}:{station['port']}")
+                        title=station["title"], data=_station_data(station),
+                        unique_id=_station_unique_id(station))
                 finally:
                     station.pop("password", None)
                     self._pending = None

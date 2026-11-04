@@ -31,20 +31,21 @@ only they needed. Windows, iVMS, SADP and the Hik-Connect phone app are not requ
 1. HACS -> three-dot menu -> Custom repositories -> add
    `https://github.com/berkkayhan34-sys/hikvision-intercom-chime`, category **Integration**
    -> download **Hikvision Intercom** -> restart Home Assistant.
-2. Settings -> Devices & services -> Add integration -> **Hikvision Intercom** -> sign in
-   with your Hik-Connect account. Door, camera, calls and volumes work from here.
-3. Chime only: Settings -> Apps -> App store -> three-dot menu -> Repositories -> add the same
-   URL -> install **Hikvision SDK Bridge** (the image is built on your device; the first
-   build downloads about 26 MB) -> start it.
-4. On the integration page choose **Add local station** and enter the station's address, SDK
-   port and admin credentials. Confirm the app restart. The password is stored only in the
-   app's own options; the integration entry never contains it.
+2. Settings -> Apps -> App store -> three-dot menu -> Repositories -> add the same URL ->
+   install **Hikvision SDK Bridge** (the image is built on your device; the first build
+   downloads about 26 MB). It may stay stopped; the integration starts it. The integration
+   does not work without this app, and setup stops at an install prompt until it is there.
+3. Settings -> Devices & services -> Add integration -> **Hikvision Intercom**. One flow
+   asks for the app (if missing), your Hik-Connect login, then the indoor station's address,
+   SDK port and admin credentials, and finally confirms the app restart. The station
+   password is stored only in the app's own options; the integration entry never contains it.
 
 ## Entities
 
 Per Hik-Connect station: answer / hang up / unlock buttons, lock, camera, call status,
 last ring, doorbell event, ringtone / two-way / microphone volumes, do-not-disturb and
-status sensors. Per local station (named when you add it):
+status sensors. The chime joins the same device (one **Doorbell** device) when the account
+has one device and one station; with more, each station gets its own device. Chime entities:
 
 - **Play chime** - send the selected sound with the selected gain and repetitions.
 - **Stop chime** - stop only this integration's own playback.
@@ -65,14 +66,14 @@ are kept privately under `.storage/hikvision_intercom/`; at most 16 per station.
 
 ## Moving from the old setup
 
-Entity IDs are name-derived, so they stay the same when you reuse the names: give the local
-station the title *Living Room Doorbell Chime* to keep
-`button.living_room_doorbell_chime_play_chime` and friends. Cloud entities lose the `_2`
+Entity IDs derive from the device name, so the chime entities are named after the Doorbell
+device (for example `button.doorbell_play_chime`); entities already registered by an earlier
+version keep their IDs and move into the Doorbell device. Cloud entities lose the `_2`
 suffix once the old integrations are removed.
 
 Order: take a Home Assistant backup -> remove the three old integrations and the
-*Hikvision Doorbell* app -> restart -> add the new integration -> install the bridge app ->
-add the station. Not carried over from the *Hikvision Doorbell* app: the ISAPI text box,
+*Hikvision Doorbell* app -> restart -> install the bridge app -> add the integration (one
+flow: app check, login, station). Not carried over from the *Hikvision Doorbell* app: the ISAPI text box,
 reboot, mute/unmute, two-way call on/off and the MQTT call-state sensors (call state and
 volumes come from the cloud entities and the station's own call status instead).
 

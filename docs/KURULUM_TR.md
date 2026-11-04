@@ -15,14 +15,14 @@ Hik-Connect hesabınızla çalışır; iç ünitede özel zil sesi için ek olar
 
 1. HACS -> Özel depolar -> `https://github.com/berkkayhan34-sys/hikvision-intercom-chime`
    (Entegrasyon) -> **Hikvision Intercom** indir -> Home Assistant'ı yeniden başlat.
-2. Ayarlar -> Cihazlar ve hizmetler -> Entegrasyon ekle -> **Hikvision Intercom** ->
-   Hik-Connect hesabınızla giriş yapın.
-3. Zil sesi için: Ayarlar -> Uygulamalar -> Uygulama mağazası -> sağ üst menü -> Depolar ->
-   aynı adresi ekleyin -> **Hikvision SDK Bridge** kurun (ilk derleme cihazınızda yapılır,
-   yaklaşık 26 MB indirir) -> başlatın.
-4. Entegrasyon sayfasında **Yerel istasyon ekle**: adres, SDK portu, yönetici kullanıcı adı
-   ve parola. Uygulamanın yeniden başlatılmasını onaylayın. Parola yalnızca uygulamanın kendi
-   ayarlarında saklanır, entegrasyon kaydında asla.
+2. Ayarlar -> Uygulamalar -> Uygulama mağazası -> sağ üst menü -> Depolar -> aynı adresi
+   ekleyin -> **Hikvision SDK Bridge** kurun (ilk derleme cihazınızda yapılır, yaklaşık 26 MB
+   indirir). Durdurulmuş kalabilir; entegrasyon başlatır. Uygulama olmadan entegrasyon
+   çalışmaz; kurulum, uygulama kurulana kadar bir kurulum istemi gösterir.
+3. Ayarlar -> Cihazlar ve hizmetler -> Entegrasyon ekle -> **Hikvision Intercom**. Tek akış
+   sırasıyla uygulamayı (yoksa) ister, Hik-Connect girişini alır, ardından iç ünitenin adresi,
+   SDK portu ve yönetici bilgilerini sorar ve uygulamanın yeniden başlatılmasını onaylatır.
+   Parola yalnızca uygulamanın kendi ayarlarında saklanır, entegrasyon kaydında asla.
 
 ## Kullanım
 
@@ -35,7 +35,7 @@ Hik-Connect hesabınızla çalışır; iç ünitede özel zil sesi için ek olar
 ## Eski kurulumdan geçiş
 
 Home Assistant yedeği alın -> eski üç entegrasyonu ve *Hikvision Doorbell* uygulamasını
-kaldırın -> yeniden başlatın -> yeni entegrasyonu ve uygulamayı kurun -> istasyonu ekleyin.
-İstasyonu *Living Room Doorbell Chime* adıyla eklerseniz varlık kimlikleri aynı kalır.
+kaldırın -> yeniden başlatın -> uygulamayı kurun -> entegrasyonu ekleyin (tek akış).
+Zil varlıkları Doorbell cihazına katılır; önceki sürümde kayıtlı varlıkların kimlikleri korunur.
 Eski uygulamadaki ISAPI kutusu, yeniden başlatma, sessize alma ve MQTT çağrı sensörleri
 taşınmaz.

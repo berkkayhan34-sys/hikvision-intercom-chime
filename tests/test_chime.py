@@ -17,11 +17,11 @@ from custom_components.hikvision_intercom.const import DOMAIN
 
 from .conftest import STATION_URL, TOKEN
 
-PLAY = "button.living_room_doorbell_chime_play_chime"
-STOP = "button.living_room_doorbell_chime_stop_chime"
-GAIN = "number.living_room_doorbell_chime_digital_gain"
-REPEATS = "number.living_room_doorbell_chime_repetitions"
-STATUS = "sensor.living_room_doorbell_chime_request_status"
+PLAY = "button.ds_kh6320_wte1_play_chime"
+STOP = "button.ds_kh6320_wte1_stop_chime"
+GAIN = "number.ds_kh6320_wte1_digital_gain"
+REPEATS = "number.ds_kh6320_wte1_repetitions"
+STATUS = "sensor.ds_kh6320_wte1_request_status"
 SOUND = Path(__file__).parents[1] / "custom_components" / "hikvision_intercom" / "assets" / "ding_dong.wav"
 
 ONLINE = {"name": "x", "connected": True, "serial": "S", "call_status": "idle", "broadcast": "idle"}

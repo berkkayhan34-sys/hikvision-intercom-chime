@@ -3,15 +3,15 @@
 import json
 from pathlib import Path
 
-from homeassistant.config_entries import ConfigEntryState
-from homeassistant.helpers import entity_registry as er
+from homeassistant.config_entries import ConfigEntryState, ConfigSubentry
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from custom_components.hikvision_intercom.const import DOMAIN
 from custom_components.hikvision_intercom.diagnostics import async_get_config_entry_diagnostics
 from custom_components.hikvision_intercom.hikconnect_api import HikConnectAuthError
 
-from .conftest import PASSWORD, STATION_NAME, TOKEN
-from .test_chime import PLAY, STATUS, mock_bridge, setup
+from .conftest import PASSWORD, SERIAL, STATION_NAME, TOKEN
+from .test_chime import ONLINE, PLAY, STATUS, mock_bridge, setup
 
 
 def audio_dir(hass, subentry_id):
@@ -107,4 +107,46 @@ async def test_entity_unique_ids_are_per_station_and_stable(hass, cloud, supervi
     subentry_id = next(iter(entry.subentries))
     registry = er.async_get(hass)
     assert registry.async_get(PLAY).unique_id == f"{subentry_id}_play"
-    assert registry.async_get(PLAY).config_subentry_id == subentry_id
+    # The entry owns the entities so the shared Doorbell device is not also listed under the station.
+    assert registry.async_get(PLAY).config_subentry_id is None
+
+
+async def test_an_earlier_separate_chime_device_moves_into_the_doorbell_keeping_entity_ids(
+        hass, cloud, supervisor, entry, aioclient_mock):
+    """What the box looks like after the previous version: a device of its own, and
+    entities attached to the station subentry."""
+    subentry_id = next(iter(entry.subentries))
+    devices, registry = dr.async_get(hass), er.async_get(hass)
+    old = devices.async_get_or_create(
+        config_entry_id=entry.entry_id, config_subentry_id=subentry_id,
+        identifiers={(DOMAIN, f"station_{subentry_id}")}, name="Doorbell chime")
+    seeded = {}
+    for domain, key in (("button", "play"), ("button", "stop"), ("number", "gain_db"),
+                        ("number", "repeats"), ("sensor", "status")):
+        seeded[key] = registry.async_get_or_create(
+            domain, DOMAIN, f"{subentry_id}_{key}", suggested_object_id=f"doorbell_chime_{key}",
+            config_entry=entry, config_subentry_id=subentry_id, device_id=old.id).entity_id
+    mock_bridge(aioclient_mock)
+    await setup(hass, entry)
+
+    assert {registry.async_get(entity_id).entity_id for entity_id in seeded.values()} == set(seeded.values())
+    shared = devices.async_get_device_by_identifier((DOMAIN, SERIAL), entry.entry_id)
+    assert shared is not None
+    for entity_id in seeded.values():
+        assert registry.async_get(entity_id).device_id == shared.id
+        assert registry.async_get(entity_id).config_subentry_id is None
+    assert devices.async_get_device_by_identifier(
+        (DOMAIN, f"station_{subentry_id}"), entry.entry_id) is None
+    assert len(dr.async_entries_for_config_entry(devices, entry.entry_id)) == 1
+
+
+async def test_two_stations_keep_separate_devices(hass, cloud, supervisor, entry, aioclient_mock):
+    hass.config_entries.async_add_subentry(entry, ConfigSubentry(
+        subentry_type="station", title="Hall chime", unique_id="192.168.0.60:8000",
+        data={"name": "st_192_168_0_60", "host": "192.168.0.60", "port": 8000,
+              "username": "admin", "gain_db": 0, "repeats": 4}))
+    aioclient_mock.get("http://a1b2c3d4-hikvision-sdk:8099/v1/stations/st_192_168_0_60", json=ONLINE)
+    mock_bridge(aioclient_mock)
+    await setup(hass, entry)
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    assert len(devices) == 3  # the doorbell and one device per station

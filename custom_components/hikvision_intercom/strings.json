@@ -1,9 +1,13 @@
 {
   "config": {
     "step": {
-      "user": {
+      "app": {
+        "title": "Install the Hikvision SDK Bridge app",
+        "description": "The doorbell chime needs the Hikvision SDK Bridge app, and this integration does not work without it. Install it, then press Submit to check again.\n\n1. [Add the app repository]({add_repository_link}) (or add `{repository_url}` under Settings → Apps → App store → Repositories).\n2. Install **Hikvision SDK Bridge**. It can stay stopped; this integration starts it.\n3. Come back here and press Submit."
+      },
+      "account": {
         "title": "Hikvision Intercom",
-        "description": "Log in with your Hik-Connect account. Live video streams directly from the station over your LAN; discovery and the controls (unlock, calls, volumes) go through the Hik-Connect cloud. Add a local station afterwards to enable the doorbell chime.",
+        "description": "Log in with your Hik-Connect account. Live video streams directly from the station over your LAN; discovery and the controls (unlock, calls, volumes) go through the Hik-Connect cloud. The next step connects the local station for the doorbell chime.",
         "data": {
           "account": "Account (email or username)",
           "password": "Password",
@@ -13,6 +17,23 @@
         "data_description": {
           "server": "Pick your region, or Custom to enter an API URL. Global auto-routes to the right region.",
           "base_url": "e.g. apiieu.hik-connect.com — used only when Server is set to Custom."
+        }
+      },
+      "station": {
+        "title": "Indoor station connection",
+        "description": "Use the station's admin password, not your Hik-Connect password. Only the SDK Bridge app stores it; this integration does not.",
+        "data": {
+          "host": "Station IP address",
+          "port": "SDK port",
+          "username": "Admin username",
+          "password": "Station admin password"
+        }
+      },
+      "confirm": {
+        "title": "Confirm app configuration",
+        "description": "The Hikvision SDK Bridge app's station list will be updated and the app started or restarted if needed; other stations in the app may briefly disconnect. No unlock, alarm, firmware or playback action is performed.",
+        "data": {
+          "confirm_restart": "I confirm the app configuration and a restart if needed"
         }
       },
       "reconfigure": {
@@ -33,12 +54,23 @@
     "error": {
       "invalid_auth": "Invalid account or password (a CAPTCHA may be required — open the Hik-Connect app once, then retry).",
       "cannot_connect": "Could not reach Hik-Connect.",
-      "custom_url_required": "Select a server, or choose Custom and enter an API URL."
+      "custom_url_required": "Select a server, or choose Custom and enter an API URL.",
+      "invalid_host": "Enter the station's private IPv4 address, not a URL or public address.",
+      "invalid_port": "The SDK port must be a whole number from 1 to 65535.",
+      "invalid_credentials": "Enter the station's admin username and password, at most 64 UTF-8 bytes each, without control characters.",
+      "confirmation_required": "Confirm the app configuration and restart to continue.",
+      "app_required": "The Hikvision SDK Bridge app is not installed yet. Install it as described above, then press Submit.",
+      "app_ambiguous": "More than one Hikvision SDK Bridge app is installed. Keep one and retry.",
+      "app_config_failed": "App configuration or start failed. The previous options were restored. Check the app and retry.",
+      "app_rollback_failed": "App setup AND restoration failed. Restore the app configuration from your native Home Assistant backup.",
+      "duplicate_station": "Another station in the bridge already uses this address."
     },
     "abort": {
       "already_configured": "This account is already configured.",
       "account_mismatch": "The account must match the one this integration was set up with. To use a different account, add a new integration.",
-      "reconfigure_successful": "Server updated."
+      "reconfigure_successful": "Server updated.",
+      "supervisor_required": "Home Assistant OS or Supervised is required: the chime needs the Hikvision SDK Bridge app. No Windows app is needed.",
+      "setup_expired": "The setup session expired. Start again."
     }
   },
   "options": {

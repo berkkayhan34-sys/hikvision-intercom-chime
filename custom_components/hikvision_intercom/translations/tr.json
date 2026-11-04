@@ -2,9 +2,13 @@
   "title": "Hikvision Intercom",
   "config": {
     "step": {
-      "user": {
+      "app": {
+        "title": "Hikvision SDK Bridge uygulamasını kurun",
+        "description": "Zil sesi için Hikvision SDK Bridge uygulaması gerekir; bu entegrasyon onsuz çalışmaz. Uygulamayı kurun, ardından tekrar kontrol için Gönder'e basın.\n\n1. [Uygulama deposunu ekleyin]({add_repository_link}) (veya Ayarlar → Uygulamalar → Uygulama mağazası → Depolar bölümüne `{repository_url}` ekleyin).\n2. **Hikvision SDK Bridge** uygulamasını kurun. Durdurulmuş kalabilir; entegrasyon onu başlatır.\n3. Buraya dönüp Gönder'e basın."
+      },
+      "account": {
         "title": "Hikvision Intercom",
-        "description": "Hik-Connect hesabınızla giriş yapın. Canlı görüntü doğrudan istasyondan yerel ağınız üzerinden gelir; cihaz keşfi ve denetimler (kapı açma, çağrılar, ses seviyeleri) Hik-Connect bulutu üzerinden yürür. Zil sesi için sonradan yerel bir istasyon ekleyin.",
+        "description": "Hik-Connect hesabınızla giriş yapın. Canlı görüntü doğrudan istasyondan yerel ağınız üzerinden gelir; cihaz keşfi ve denetimler (kapı açma, çağrılar, ses seviyeleri) Hik-Connect bulutu üzerinden yürür. Sonraki adımda zil sesi için yerel istasyon bağlanır.",
         "data": {
           "account": "Hesap (e-posta veya kullanıcı adı)",
           "password": "Parola",
@@ -14,6 +18,23 @@
         "data_description": {
           "server": "Bölgenizi seçin veya özel bir API adresi girmek için Özel'i seçin. Küresel seçenek doğru bölgeye otomatik yönlendirir.",
           "base_url": "örn. apiieu.hik-connect.com — yalnızca Sunucu 'Özel' seçiliyken kullanılır."
+        }
+      },
+      "station": {
+        "title": "İç ünite bağlantısı",
+        "description": "İstasyonun yönetici parolasını kullanın, Hik-Connect parolasını değil. Yalnızca SDK Bridge uygulaması saklar; bu entegrasyon saklamaz.",
+        "data": {
+          "host": "İstasyon IP adresi",
+          "port": "SDK portu",
+          "username": "Yönetici kullanıcı adı",
+          "password": "İstasyon yönetici parolası"
+        }
+      },
+      "confirm": {
+        "title": "Uygulama yapılandırmasını onayla",
+        "description": "SDK Bridge uygulamasının istasyon listesi güncellenecek ve gerekirse uygulama başlatılacak/yeniden başlatılacak; uygulamadaki diğer istasyonların bağlantısı kısa süre kopabilir. Kilit açma, alarm, ürün yazılımı veya ses çalma işlemi yapılmaz.",
+        "data": {
+          "confirm_restart": "Uygulama yapılandırmasını ve gerekirse yeniden başlatmayı onaylıyorum"
         }
       },
       "reconfigure": {
@@ -34,12 +55,23 @@
     "error": {
       "invalid_auth": "Hesap veya parola geçersiz (CAPTCHA gerekebilir — Hik-Connect uygulamasını bir kez açıp tekrar deneyin).",
       "cannot_connect": "Hik-Connect'e ulaşılamadı.",
-      "custom_url_required": "Bir sunucu seçin veya Özel'i seçip bir API adresi girin."
+      "custom_url_required": "Bir sunucu seçin veya Özel'i seçip bir API adresi girin.",
+      "invalid_host": "URL veya genel IP yerine cihazın özel IPv4 adresini gir.",
+      "invalid_port": "SDK portu 1 ile 65535 arasında tam sayı olmalı.",
+      "invalid_credentials": "Cihaz admin kullanıcı adı ve parolasını gir; her biri en fazla 64 UTF-8 bayt olmalı ve kontrol karakteri içermemeli.",
+      "confirmation_required": "Devam etmek için uygulama yapılandırmasını ve yeniden başlatmayı onaylayın.",
+      "app_ambiguous": "Birden fazla Hikvision SDK Bridge uygulaması kurulu. Birini bırakıp tekrar deneyin.",
+      "app_config_failed": "Uygulama yapılandırması veya başlatma başarısız. Önceki ayarlar geri yüklendi. Uygulamayı kontrol edip tekrar deneyin.",
+      "app_rollback_failed": "Uygulama kurulumu VE geri yükleme başarısız. Uygulama yapılandırmasını Home Assistant yedeğinizden geri yükleyin.",
+      "duplicate_station": "Köprüdeki başka bir istasyon bu adresi zaten kullanıyor.",
+      "app_required": "Hikvision SDK Bridge uygulaması henüz kurulu değil. Yukarıda anlatıldığı gibi kurun, ardından Gönder'e basın."
     },
     "abort": {
       "already_configured": "Bu hesap zaten yapılandırılmış.",
       "account_mismatch": "Hesap, entegrasyonun kurulduğu hesapla aynı olmalıdır. Başka bir hesap için yeni bir entegrasyon ekleyin.",
-      "reconfigure_successful": "Sunucu güncellendi."
+      "reconfigure_successful": "Sunucu güncellendi.",
+      "supervisor_required": "Home Assistant OS veya Supervised gerekir: zil sesi için Hikvision SDK Bridge uygulaması gerekir. Windows uygulaması gerekmez.",
+      "setup_expired": "Kurulum oturumu süresi doldu. Baştan başlayın."
     }
   },
   "options": {

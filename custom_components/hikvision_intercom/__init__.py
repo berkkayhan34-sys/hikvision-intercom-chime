@@ -12,6 +12,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -126,7 +127,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         elif _station_ids(entry) != station_ids:
             # Stations were added or removed. Editing a station's sound settings
             # changes only subentry data and is applied live, without a reload.
-            await _async_forget_stations(hass, station_names, station_ids - _station_ids(entry))
+            await _async_forget_stations(
+                hass, entry.entry_id, station_names, station_ids - _station_ids(entry))
             hass.config_entries.async_schedule_reload(entry.entry_id)
 
     entry.async_on_unload(entry.add_update_listener(_options_updated))
@@ -218,7 +220,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if push is None or push.used_fallback_host:
         longlink = await _async_start_longlink(hass, entry, client, coordinator)
 
-    chimes = await _async_create_chimes(hass, entry)
+    # One cloud device and one station: the chime is part of that device, so the
+    # doorbell is a single device. With several of either, each station keeps its own
+    # device, because two chimes on one device would have identical entity names.
+    shared_serial = devices[0].serial if len(devices) == 1 and len(station_ids) == 1 else None
+    chimes = await _async_create_chimes(hass, entry, shared_serial)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "chimes": chimes,
@@ -233,7 +239,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "quality": {},  # (serial_chN -> MAIN|SUB), shared: select writes, camera reads
     }
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _async_drop_stale_station_devices(hass, entry, chimes)
     return True
+
+
+@callback
+def _async_drop_stale_station_devices(
+    hass: HomeAssistant, entry: ConfigEntry, chimes: dict[str, ChimeRuntime]
+) -> None:
+    """Remove the separate chime device an earlier version created, once its
+    entities have moved to the shared Doorbell device (never before, or they would go too)."""
+    device_registry = dr.async_get(hass)
+    entity_registry = er.async_get(hass)
+    for subentry_id, chime in chimes.items():
+        if not chime.device_serial:
+            continue
+        stale = device_registry.async_get_device_by_identifier(
+            (DOMAIN, f"station_{subentry_id}"), entry.entry_id)
+        if stale is not None and not er.async_entries_for_device(
+                entity_registry, stale.id, include_disabled_entities=True):
+            device_registry.async_remove_device(stale.id)
 
 
 async def _async_start_longlink(
@@ -318,7 +343,9 @@ def _audio_root(hass: HomeAssistant) -> Path:
     return Path(hass.config.path(".storage", DOMAIN))
 
 
-async def _async_create_chimes(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, ChimeRuntime]:
+async def _async_create_chimes(
+    hass: HomeAssistant, entry: ConfigEntry, shared_serial: str | None
+) -> dict[str, ChimeRuntime]:
     """One runtime per station. A missing or stopped bridge app, or an unusable audio
     file, never fails setup: the cloud features keep working and the station's chime
     entities report unavailable or an error state."""
@@ -334,7 +361,7 @@ async def _async_create_chimes(hass: HomeAssistant, entry: ConfigEntry) -> dict[
             _LOGGER.error("Audio storage for station %s is unusable; chime disabled",
                           subentry.title)
             continue
-        chime = ChimeRuntime(hass, entry, subentry, link, store)
+        chime = ChimeRuntime(hass, entry, subentry, link, store, shared_serial)
         try:
             await chime.async_validate()
         except (AudioError, OSError) as error:
@@ -346,7 +373,7 @@ async def _async_create_chimes(hass: HomeAssistant, entry: ConfigEntry) -> dict[
 
 
 async def _async_forget_stations(
-    hass: HomeAssistant, names: dict[str, str], removed: set[str]
+    hass: HomeAssistant, entry_id: str, names: dict[str, str], removed: set[str]
 ) -> None:
     """Delete audio uploaded for removed stations (only files this integration wrote)
     and drop their credentials from the bridge app, best effort."""
@@ -355,9 +382,15 @@ async def _async_forget_stations(
             AudioStore(_audio_root(hass), subentry_id).remove_owned_files()
 
     await hass.async_add_executor_job(work)
+    # Chime entities belong to the entry (not the subentry), so Home Assistant will not
+    # drop them with the station; unique ids are "<subentry_id>_<key>".
+    entity_registry = er.async_get(hass)
+    for registered in er.async_entries_for_config_entry(entity_registry, entry_id):
+        if registered.unique_id.split("_", 1)[0] in removed:
+            entity_registry.async_remove(registered.entity_id)
     for subentry_id in removed:
         await remove_station(hass, names[subentry_id])
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    await _async_forget_stations(hass, _station_names(entry), _station_ids(entry))
+    await _async_forget_stations(hass, entry.entry_id, _station_names(entry), _station_ids(entry))

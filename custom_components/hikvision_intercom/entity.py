@@ -1,4 +1,10 @@
-"""Shared device identity and availability for the chime entities of one station."""
+"""Shared device identity and availability for the chime entities of one station.
+
+The chime entities join the Hik-Connect doorbell's own device when the account has
+exactly one device, so the doorbell is one device in Home Assistant. Entities belong to
+the config entry, not the station subentry, so the merged device is not also listed
+under the subentry; removing a station removes its entities explicitly.
+"""
 
 from __future__ import annotations
 
@@ -17,12 +23,16 @@ class ChimeEntity(CoordinatorEntity):
         self.runtime = chime
         self._attr_unique_id = f"{chime.subentry_id}_{key}"
         self._attr_translation_key = key
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"station_{chime.subentry_id}")},
-            name=chime.subentry.title,
-            manufacturer="Hikvision",
-            model="Indoor station chime",
-        )
+        if chime.device_serial:
+            # Identifiers only: the cloud side owns the name, model and firmware.
+            self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, chime.device_serial)})
+        else:
+            self._attr_device_info = DeviceInfo(
+                identifiers={(DOMAIN, f"station_{chime.subentry_id}")},
+                name=chime.subentry.title,
+                manufacturer="Hikvision",
+                model="Indoor station chime",
+            )
 
     @property
     def available(self) -> bool:

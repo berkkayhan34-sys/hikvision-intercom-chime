@@ -9,6 +9,7 @@ import pytest
 from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
 from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from unittest.mock import patch
 
 from custom_components.hikvision_intercom.const import DOMAIN
@@ -23,26 +24,139 @@ CONNECTION = {"title": "Hall chime", "host": "192.168.0.60", "port": 8000,
               "username": "admin", "password": PASSWORD}
 
 
-# --- cloud account -----------------------------------------------------------------
-async def test_cloud_login_creates_the_entry(hass: HomeAssistant, cloud):
-    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"account": "Owner@Example.test", "password": "pw",
-                            "server": "https://api.hik-connect.com", "base_url": ""})
+# --- one setup flow: app, cloud account, station -------------------------------------------
+ACCOUNT = {"account": "Owner@Example.test", "password": "pw",
+           "server": "https://api.hik-connect.com", "base_url": ""}
+STATION = {"host": "192.168.0.50", "port": 8000, "username": "admin", "password": PASSWORD}
+
+
+async def start_setup(hass):
+    return await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+
+
+async def to_station_step(hass):
+    result = await start_setup(hass)
+    assert result["step_id"] == "account"
+    return await hass.config_entries.flow.async_configure(result["flow_id"], ACCOUNT)
+
+
+async def test_setup_flow_asks_for_the_app_first_and_continues_once_it_is_installed(
+        hass: HomeAssistant, cloud, supervisor):
+    with patch("custom_components.hikvision_intercom.config_flow.find_app",
+               side_effect=SetupError("app_required")):
+        result = await start_setup(hass)
+        assert result["type"] is FlowResultType.FORM and result["step_id"] == "app"
+        assert result["errors"] == {"base": "app_required"}
+        assert "hikvision-intercom-chime" in result["description_placeholders"]["repository_url"]
+        # still not installed: the same page again, nothing else is reachable
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["step_id"] == "app" and result["errors"] == {"base": "app_required"}
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})  # installed now
+    assert result["step_id"] == "account"
+
+
+async def test_setup_flow_needs_supervisor(hass: HomeAssistant, cloud):
+    with patch("custom_components.hikvision_intercom.config_flow.find_app",
+               side_effect=SetupError("supervisor_required")):
+        result = await start_setup(hass)
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "supervisor_required"
+
+
+async def test_a_stopped_app_goes_straight_to_the_account_step(hass: HomeAssistant, cloud, supervisor):
+    supervisor.app = supervisor.app.__class__(
+        supervisor.app.slug, supervisor.app.hostname, False, supervisor.app.options)
+    with patch("custom_components.hikvision_intercom.config_flow.find_app",
+               return_value=supervisor.app):
+        result = await start_setup(hass)
+    assert result["step_id"] == "account"
+
+
+async def test_full_setup_creates_the_entry_with_its_station_and_no_password(
+        hass: HomeAssistant, cloud, supervisor, aioclient_mock):
+    mock_bridge(aioclient_mock)
+    result = await to_station_step(hass)
+    assert result["step_id"] == "station"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], STATION)
+    assert result["step_id"] == "confirm"
+    assert supervisor.configured == []  # nothing touches the app before confirmation
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"confirm_restart": True})
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"]["account"] == "Owner@Example.test"
-    assert result["result"].unique_id == "owner@example.test"
+    assert supervisor.configured == [{**STATION, "name": "st_192_168_0_50"}]
+    entry = result["result"]
+    assert entry.unique_id == "owner@example.test"
+    (station,) = entry.subentries.values()
+    assert dict(station.data) == {"name": "st_192_168_0_50", "host": "192.168.0.50", "port": 8000,
+                                  "username": "admin", "gain_db": 0, "repeats": 4}
+    assert PASSWORD not in repr(entry.as_dict())
+    await hass.async_block_till_done()
+    assert hass.states.get("button.ds_kh6320_wte1_play_chime") is not None
+
+
+async def test_the_doorbell_is_a_single_device_with_the_chime_in_it(
+        hass: HomeAssistant, cloud, supervisor, aioclient_mock):
+    mock_bridge(aioclient_mock)
+    result = await to_station_step(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], STATION)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"confirm_restart": True})
+    await hass.async_block_till_done()
+    entry = result["result"]
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    assert len(devices) == 1
+    registry = er.async_get(hass)
+    on_device = {e.entity_id for e in er.async_entries_for_device(registry, devices[0].id)}
+    assert {"button.ds_kh6320_wte1_play_chime", "number.ds_kh6320_wte1_digital_gain",
+            "button.ds_kh6320_wte1_answer_call"} <= on_device
+
+
+@pytest.mark.parametrize("change, key", [
+    ({"host": "8.8.8.8"}, "invalid_host"), ({"port": 8000.5}, "invalid_port"),
+    ({"username": ""}, "invalid_credentials")])
+async def test_station_step_validation_keeps_the_form(hass, cloud, supervisor, change, key):
+    result = await to_station_step(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {**STATION, **change})
+    assert result["step_id"] == "station" and result["errors"] == {"base": key}
+    assert supervisor.configured == []
+
+
+async def test_setup_flow_unticked_confirmation_changes_nothing(hass, cloud, supervisor):
+    result = await to_station_step(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], STATION)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"confirm_restart": False})
+    assert result["step_id"] == "confirm" and result["errors"] == {"base": "confirmation_required"}
+    assert supervisor.configured == []
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+async def test_setup_flow_app_failure_creates_nothing_and_asks_for_the_station_again(
+        hass, cloud, supervisor):
+    async def fail(hass_, station):
+        raise SetupError("app_config_failed")
+
+    result = await to_station_step(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], STATION)
+    with patch("custom_components.hikvision_intercom.config_flow.configure_station", fail):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"confirm_restart": True})
+    assert result["step_id"] == "station" and result["errors"] == {"base": "app_config_failed"}
+    assert hass.config_entries.async_entries(DOMAIN) == []
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+    assert flow._station is None  # the password is gone
 
 
 @pytest.mark.parametrize("error, key", [(HikConnectAuthError("bad"), "invalid_auth"),
                                         (OSError("down"), "cannot_connect")])
-async def test_cloud_login_errors_keep_the_form(hass: HomeAssistant, cloud, error, key):
+async def test_cloud_login_errors_keep_the_form(hass: HomeAssistant, cloud, supervisor, error, key):
     cloud.login_error = error
-    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await start_setup(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], ACCOUNT)
+    assert result["step_id"] == "account" and result["errors"] == {"base": key}
+
+
+async def test_an_account_that_is_already_set_up_aborts(hass, cloud, supervisor, entry):
+    result = await start_setup(hass)
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"account": "a@b.test", "password": "pw",
-                            "server": "https://api.hik-connect.com", "base_url": ""})
-    assert result["type"] is FlowResultType.FORM and result["errors"] == {"base": key}
+        result["flow_id"], {**ACCOUNT, "account": "owner@example.test"})
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "already_configured"
 
 
 # --- add a station -------------------------------------------------------------------
@@ -84,7 +198,7 @@ async def test_new_station_gets_its_own_entities_after_reload(hass, cloud, super
     await hass.config_entries.subentries.async_configure(result["flow_id"], {"confirm_restart": True})
     await hass.async_block_till_done()
     assert hass.states.get("button.hall_chime_play_chime") is not None
-    assert hass.states.get("button.living_room_doorbell_chime_play_chime") is not None
+    assert hass.states.get("button.ds_kh6320_wte1_play_chime") is not None
 
 
 async def test_add_station_requires_the_app(hass, cloud, supervisor, entry, aioclient_mock):
@@ -216,7 +330,7 @@ async def test_reconfigure_with_an_uploaded_wav_stores_it_and_uses_it(
     digest = next(iter(entry.subentries.values())).data["source_digest"]
     assert len(digest) == 64
     await hass.services.async_call(
-        "button", "press", {"entity_id": "button.living_room_doorbell_chime_play_chime"}, blocking=True)
+        "button", "press", {"entity_id": "button.ds_kh6320_wte1_play_chime"}, blocking=True)
     (_, _, body, _), = [c for c in aioclient_mock.mock_calls if c[0] == "POST"]
     assert len(body) == 1 * 8000 * 2 * 2  # the uploaded 1 s clip, twice
 

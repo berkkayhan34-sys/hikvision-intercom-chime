@@ -75,8 +75,10 @@ class AppLink:
 
 class ChimeRuntime:
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, subentry: ConfigSubentry,
-                 link: AppLink, store: AudioStore) -> None:
+                 link: AppLink, store: AudioStore, device_serial: str | None = None) -> None:
         self.hass, self.entry, self.link, self.store = hass, entry, link, store
+        # Serial of the cloud device this chime shares, or None for a device of its own.
+        self.device_serial = device_serial
         self.subentry_id = subentry.subentry_id
         self.station_name: str = subentry.data["name"]
         self.status = "idle"

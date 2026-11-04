@@ -79,11 +79,8 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     await _async_setup_cloud(hass, entry, async_add_entities)
-    for subentry_id, chime in hass.data[DOMAIN][entry.entry_id]["chimes"].items():
-        async_add_entities(
-            [ChimeNumber(chime, "gain_db"), ChimeNumber(chime, "repeats")],
-            config_subentry_id=subentry_id,
-        )
+    for chime in hass.data[DOMAIN][entry.entry_id]["chimes"].values():
+        async_add_entities([ChimeNumber(chime, "gain_db"), ChimeNumber(chime, "repeats")])
 
 
 class ChimeNumber(ChimeEntity, NumberEntity):
