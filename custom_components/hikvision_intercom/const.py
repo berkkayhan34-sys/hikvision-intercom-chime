@@ -55,7 +55,6 @@ def native_stream_mode(options) -> str:
 # Device telemetry (online, wifi, firmware, disk) changes slowly — poll gently.
 STATUS_POLL_INTERVAL = 60
 
-CALL_STATUS_MAPPING = {1: "idle", 2: "ringing", 3: "call in progress"}
 CALL_STATES = ["idle", "ringing", "call in progress"]  # "unknown" -> None (reserved state)
 
 # Realtime push (EZVIZ MQTT backend, shared by Hik-Connect). A push event is

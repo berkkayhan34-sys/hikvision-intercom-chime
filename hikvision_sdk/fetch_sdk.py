@@ -22,6 +22,8 @@ def _download(url: str, name: str, attempts: int = 4, pause=time.sleep) -> bytes
 
     Only the transfer is retried; the checksum of what arrives is still verified by the caller.
     """
+    if not url.startswith("https://"):
+        raise SystemExit(f"refusing to download {name} over anything but https")  # urlopen would also open file: and ftp: addresses
     for attempt in range(1, attempts + 1):
         try:
             with urllib.request.urlopen(url, timeout=60) as response:

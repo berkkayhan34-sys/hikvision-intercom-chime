@@ -15,7 +15,6 @@ import json
 import logging
 import re
 import threading
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import monotonic
@@ -23,6 +22,8 @@ from typing import Any, Callable
 from urllib.parse import quote
 
 import requests
+from defusedxml import ElementTree as ET  # the station's answers come over the network; no DTD or entity is accepted
+from defusedxml.common import DefusedXmlException
 
 try:
     from .lib.cas import EzvizCAS
@@ -480,7 +481,7 @@ class HikConnectClient:
         r = self.isapi(serial, "GET", "/ISAPI/VideoIntercom/operationTime")
         try:
             root = ET.fromstring(r.get("data") or "")
-        except ET.ParseError:
+        except (ET.ParseError, DefusedXmlException):
             return {}
         out: dict[str, int] = {}
         for el in root:

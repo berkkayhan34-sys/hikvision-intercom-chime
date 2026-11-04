@@ -198,7 +198,6 @@ class Cpd7LanClient:
     Sequence:
         c = Cpd7LanClient(host, related_device, aes_key)
         c.start()                              # blocks ~1s for handshake
-        ecdh_priv = c.ecdh_priv                # for StreamDecoder
         while True:
             buf = c.read_chunk()
             if not buf:
@@ -236,13 +235,8 @@ class Cpd7LanClient:
         self._recv_timeout = recv_timeout
         self._cmd_timeout = cmd_timeout
         self._play_sock: socket.socket | None = None
-        self._ecdh_priv = None
         self._ecdh_pub_b64: str | None = None
         self._closed = False
-
-    @property
-    def ecdh_priv(self):
-        return self._ecdh_priv
 
     def _send_cmd(
         self, sock: socket.socket, seq: int, cmd: int, xml: bytes, tag: str
@@ -267,7 +261,7 @@ class Cpd7LanClient:
         if self._play_sock is not None:
             raise RuntimeError("already started")
 
-        self._ecdh_priv, self._ecdh_pub_b64 = generate_ecdh_keypair()
+        _private_key, self._ecdh_pub_b64 = generate_ecdh_keypair()
         my_ip = _discover_local_ip(self._host)
         _LOGGER.debug("CPD7 LAN start host=%s my_ip=%s", self._host, my_ip)
 

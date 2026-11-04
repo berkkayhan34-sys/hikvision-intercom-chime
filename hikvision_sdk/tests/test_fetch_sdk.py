@@ -68,3 +68,12 @@ def test_a_retried_download_is_still_checksum_verified(monkeypatch, tmp_path):
     monkeypatch.setattr(fetch.urllib.request, "urlopen", urlopen)
     fetch.main("amd64", tmp_path / "out")
     assert (tmp_path / "out" / "lib.so").read_bytes() == good
+
+
+def test_only_https_addresses_are_downloaded(monkeypatch):
+    opened = []
+    monkeypatch.setattr(fetch.urllib.request, "urlopen", lambda *a, **k: opened.append(a))
+    for url in ("file:///etc/passwd", "http://example.test/x", "ftp://example.test/x"):
+        with pytest.raises(SystemExit, match="https"):
+            fetch._download(url, "x", pause=lambda s: None)
+    assert opened == []

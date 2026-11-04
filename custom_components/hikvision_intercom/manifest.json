@@ -25,6 +25,7 @@
     "custom_components.hikvision_intercom"
   ],
   "requirements": [
+    "defusedxml>=0.7.1",
     "pycryptodome",
     "xmltodict",
     "paho-mqtt>=2.0"
