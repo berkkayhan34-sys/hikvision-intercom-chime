@@ -1,4 +1,7 @@
-# Third-party material
+# Licence and third-party material
+
+This repository is licensed GPL-3.0-or-later (`LICENSE`). The notes below list what it contains that is not original
+work, and under which terms.
 
 - `custom_components/hikvision_intercom/` includes code derived from
   **hikconnect_intercom** (<https://github.com/rtammekivi/hikconnect_intercom>), MIT

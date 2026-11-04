@@ -116,6 +116,11 @@ docker build --build-arg BUILD_ARCH=aarch64 -t hik-sdk-bridge hikvision_sdk   # 
 Design and security notes: [architecture](docs/architecture.md),
 [threat model](docs/threat-model.md). Third-party material: [NOTICE](NOTICE.md).
 The turquoise intercom icon is original artwork approved for this project. This is an
-unofficial community project, not a Hikvision product. No open-source licence has been
-selected for the original parts yet (the owner decides); MIT-licensed parts keep their own
-notice in `licenses/`.
+unofficial community project, not a Hikvision product.
+
+## Licence
+
+GPL-3.0-or-later (see [`LICENSE`](LICENSE)). The parts derived from the MIT-licensed
+hikconnect_intercom keep their MIT notice in [`licenses/`](licenses/) (MIT is compatible with the
+GPL); the Hikvision SDK files that the app image downloads are not part of this repository and stay
+under Hikvision's terms. See [NOTICE](NOTICE.md).
