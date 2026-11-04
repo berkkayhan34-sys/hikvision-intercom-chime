@@ -25,8 +25,10 @@ PASSWORD = "very-secret-station-password"
 
 
 @pytest.fixture(autouse=True)
-def _custom_integrations(enable_custom_integrations):
-    yield
+async def _custom_integrations(hass, enable_custom_integrations):
+    """The conversation component (a dependency, for the door intercom assistant) needs the core integration's store."""
+    from homeassistant.setup import async_setup_component
+    assert await async_setup_component(hass, "homeassistant", {})
 
 
 @pytest.fixture(autouse=True)
@@ -77,6 +79,15 @@ class FakeCloud:
 
     def add_login_listener(self, listener):
         return lambda: None
+
+    answered: list
+    answer_error = None
+
+    def answer_call(self, serial):
+        if self.answer_error:
+            raise self.answer_error
+        self.answered = getattr(self, "answered", []) + [serial]
+        return {}
 
     def _get(self, path):
         return {}

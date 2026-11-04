@@ -15,6 +15,19 @@ from .chime import ChimeRuntime
 from .const import DOMAIN
 
 
+def chime_device_info(chime: ChimeRuntime) -> DeviceInfo:
+    """The device a station's entities belong to: the cloud doorbell device when shared, else a device of its own."""
+    if chime.device_serial:
+        # Identifiers only: the cloud side owns the name, model and firmware.
+        return DeviceInfo(identifiers={(DOMAIN, chime.device_serial)})
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"station_{chime.subentry_id}")},
+        name=chime.subentry.title,
+        manufacturer="Hikvision",
+        model="Indoor station chime",
+    )
+
+
 class ChimeEntity(CoordinatorEntity):
     _attr_has_entity_name = True
 
@@ -23,16 +36,7 @@ class ChimeEntity(CoordinatorEntity):
         self.runtime = chime
         self._attr_unique_id = f"{chime.subentry_id}_{key}"
         self._attr_translation_key = key
-        if chime.device_serial:
-            # Identifiers only: the cloud side owns the name, model and firmware.
-            self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, chime.device_serial)})
-        else:
-            self._attr_device_info = DeviceInfo(
-                identifiers={(DOMAIN, f"station_{chime.subentry_id}")},
-                name=chime.subentry.title,
-                manufacturer="Hikvision",
-                model="Indoor station chime",
-            )
+        self._attr_device_info = chime_device_info(chime)
 
     @property
     def available(self) -> bool:

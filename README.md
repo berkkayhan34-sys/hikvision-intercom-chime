@@ -64,6 +64,24 @@ configure icon on the station entry -> **Reconfigure** -> upload a WAV, 8000 Hz,
 16-bit PCM, at most 1 MiB / 30 s (other formats are rejected, not guessed at). Uploads
 are kept privately under `.storage/hikvision_intercom/`; at most 16 per station.
 
+## Door calls: talk and listen (best effort, unverified on a real call)
+
+With a call answered, you can speak to the visitor and hear the door from Home Assistant.
+
+- **Talk**: the app's own **Assist** records your voice natively (so this works on `http://homeassistant.local` too, where a
+  web page cannot use the microphone). Create a voice assistant (Settings -> Voice assistants) with *Speech-to-text* = the
+  **Call microphone** entity of the doorbell, *Conversation agent* = **Call acknowledge**, *Text-to-speech* = none. Open
+  Assist in the app, pick it and speak; Assist ends a message at the first long pause, so tap again for the next one. If the
+  call is still ringing when you speak, it is answered first. The speech goes through the SDK bridge app into the call.
+- **Listen**: the door's audio during a call is a live WAV stream at
+  `/api/hikvision_intercom/listen/<entry id>/<station id>` (administrators only, played from a signed address). The Home
+  Control dashboard shows a Listen button on the camera's intercom bar when the camera device has `ix.listen` set to that path.
+- The app only opens the voice channel while the station reports a call in progress, and closes it when the call ends.
+
+What is *not* verified: the written flow follows the Hikvision SDK and the community Hikvision Doorbell app (audio sent after
+the call is answered goes to the door; audio the SDK receives is the door's, assumed G.711 mu-law). It needs one real call to
+confirm both directions on a DS-KH6320.
+
 ## Moving from the old setup
 
 Entity IDs derive from the device name, so the chime entities are named after the Doorbell

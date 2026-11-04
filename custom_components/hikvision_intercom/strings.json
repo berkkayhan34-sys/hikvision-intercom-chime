@@ -314,6 +314,12 @@
     },
     "call_active": {
       "message": "The station is ringing or in a call. The chime was blocked to avoid interrupting it."
+    },
+    "no_call": {
+      "message": "There is no answered door call. Answer the call first, then talk."
+    },
+    "answer_failed": {
+      "message": "The station did not accept the answer. Answer on the station or try again."
     }
   }
 }

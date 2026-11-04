@@ -130,3 +130,45 @@ def test_initialize_sets_timeouts():
     Sdk(lib).initialize()
     names = [name for name, _ in lib.calls]
     assert names[:3] == ["NET_DVR_Init", "NET_DVR_SetConnectTime", "NET_DVR_SetReconnect"]
+
+
+def test_device_audio_reaches_the_handler_and_local_audio_does_not():
+    lib = Lib()
+    sdk = Sdk(lib)
+    received = []
+    assert sdk.start_voice(5, received.append) == 3
+    callback = lib.calls[-1][1][2]
+    assert callback is not None
+    data = ctypes.create_string_buffer(b"\x01\x02\x03", 3)
+    callback(3, ctypes.addressof(data), 3, 1, None)   # from the device
+    callback(3, ctypes.addressof(data), 3, 0, None)   # collected locally: ignored
+    callback(3, None, 3, 1, None)                     # no buffer: ignored
+    callback(3, ctypes.addressof(data), 0, 1, None)   # no data: ignored
+    assert received == [b"\x01\x02\x03"]
+
+
+def test_a_failing_handler_never_raises_into_the_sdk_thread():
+    lib = Lib()
+    sdk = Sdk(lib)
+
+    def broken(data):
+        raise RuntimeError("handler bug")
+
+    sdk.start_voice(5, broken)
+    data = ctypes.create_string_buffer(b"\x01", 1)
+    lib.calls[-1][1][2](3, ctypes.addressof(data), 1, 1, None)  # must not raise
+
+
+def test_the_callback_is_kept_alive_until_the_channel_stops():
+    lib = Lib()
+    sdk = Sdk(lib)
+    sdk.start_voice(5, lambda data: None)
+    assert 3 in sdk._voice_callbacks
+    sdk.stop_voice(3)
+    assert 3 not in sdk._voice_callbacks
+
+
+def test_without_a_handler_no_callback_is_passed():
+    lib = Lib()
+    Sdk(lib).start_voice(5)
+    assert lib.calls[-1][1][2] is None

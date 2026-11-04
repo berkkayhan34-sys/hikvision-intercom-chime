@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterable, AsyncIterator
+from contextlib import asynccontextmanager
 
 import aiohttp
 
@@ -43,7 +45,7 @@ class BridgeClient:
             return payload
         if status == 409:
             error = payload.get("error") if isinstance(payload, dict) else None
-            raise BridgeError(error if error in ("busy", "call_active") else "app_error")
+            raise BridgeError(error if error in ("busy", "call_active", "no_call") else "app_error")
         raise BridgeError(_HTTP_CODES.get(status, "app_error"))
 
     async def status(self, name: str) -> dict:
@@ -54,3 +56,42 @@ class BridgeClient:
 
     async def stop(self, name: str) -> bool:
         return bool((await self._request("DELETE", name, "/broadcast"))["stopped"])
+
+    async def talk(self, name: str, frames: AsyncIterable[bytes]) -> int:
+        """Stream mu-law frames into the answered call while they are produced; returns the frames the app sent."""
+        try:
+            async with self._session.post(
+                    f"{self._base}/{name}/call/talk", headers=self._headers, data=frames,
+                    timeout=aiohttp.ClientTimeout(total=None, sock_connect=5, sock_read=30)) as response:
+                payload = await response.json(content_type=None)
+                status = response.status
+        except (aiohttp.ClientError, TimeoutError, ValueError):
+            raise BridgeError("app_unreachable") from None
+        if status < 300:
+            return int(payload["frames"])
+        if status == 409:
+            error = payload.get("error") if isinstance(payload, dict) else None
+            raise BridgeError(error if error in ("busy", "no_call") else "app_error")
+        raise BridgeError(_HTTP_CODES.get(status, "app_error"))
+
+    @asynccontextmanager
+    async def listen(self, name: str) -> AsyncIterator[AsyncIterator[bytes]]:
+        """The door's audio as raw mu-law chunks until the call ends or the block is left."""
+        try:
+            response = await self._session.get(
+                f"{self._base}/{name}/call/listen", headers=self._headers,
+                timeout=aiohttp.ClientTimeout(total=None, sock_connect=5, sock_read=30))
+        except (aiohttp.ClientError, TimeoutError):
+            raise BridgeError("app_unreachable") from None
+        try:
+            if response.status == 409:
+                payload = await response.json(content_type=None)
+                raise BridgeError("no_call" if payload.get("error") == "no_call" else "app_error")
+            if response.status >= 300:
+                raise BridgeError(_HTTP_CODES.get(response.status, "app_error"))
+            yield response.content.iter_any()
+        finally:
+            response.release()
+
+    async def stop_call(self, name: str) -> bool:
+        return bool((await self._request("DELETE", name, "/call"))["stopped"])

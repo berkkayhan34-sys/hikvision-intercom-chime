@@ -20,6 +20,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .audio import AudioError
 from .bridge_app import remove_station
 from .chime import AppLink, ChimeRuntime
+from .door_call import DoorCall
 from .const import (
     CALL_POLL_INTERVAL,
     CONF_ACCOUNT,
@@ -37,6 +38,7 @@ from .hikconnect_api import HikConnectAuthError, HikConnectClient, HikConnectErr
 from .longlink import HikConnectLongLink
 from .push import HikConnectPush
 from .storage import AudioStore
+from .views import DoorListenView
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [
@@ -49,11 +51,18 @@ PLATFORMS = [
     Platform.SELECT,
     Platform.NUMBER,
     Platform.SWITCH,
+    Platform.STT,
+    Platform.CONVERSATION,
 ]
 
 
 def _call_poll_interval(entry: ConfigEntry) -> timedelta:
     return timedelta(seconds=entry.options.get(CONF_CALL_POLL_INTERVAL, CALL_POLL_INTERVAL))
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    hass.http.register_view(DoorListenView())
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -228,6 +237,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "chimes": chimes,
+        "door_calls": {subentry_id: DoorCall(hass, entry.entry_id, chime) for subentry_id, chime in chimes.items()},
         "client": client,
         "devices": devices,
         "cameras": cameras,

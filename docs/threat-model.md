@@ -14,6 +14,7 @@ Supervisor app options, uploaded audio, and other people's quiet or active inter
 | Audio | Own WAV decoder with size, format, duration and repetition bounds; hashed file names; at most 16 sources per station; symlinked stores refused; no remote media, shell or conversion dependency. |
 | Playback safety | Never on setup, reload, upload or setting change; refused unless the station reports `idle`; one broadcast per station; no retry; always released afterwards. |
 | SDK image supply chain | Runtime files are downloaded at build time from one pinned commit and verified against SHA-256 checksums; a mismatch fails the build. They are Hikvision binaries obtained from a third-party repository, which is an inherited trust decision. |
+| Call audio | Opened only while the station reports a call in progress; one channel per station; talk paced to real time and bounded (chunk 64 KiB, 10 minutes); the listen stream is an authenticated administrators-only view (signed path for 60 s); the talk engine can be run by anyone who may use Assist, so only grant that to people who may speak to the door. |
 | Diagnostics | Allowlist only: no host, credentials, token, serial, e-mail or audio. |
 
 Residuals: the SDK is closed source and runs inside the app container with network access to

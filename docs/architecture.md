@@ -60,6 +60,17 @@ bridge: PCM16 -> G.711 mu-law (own table encoder; `audioop` is gone in Python 3.
 Gain 0 preserves samples bit for bit; positive gain saturates and may distort; hardware
 volume is never touched. Only an explicit Play reaches the bridge, and Play is never retried.
 
+## Door call audio
+
+`NET_DVR_StartVoiceCom_MR_V30` has a receive callback (we passed `None` for the chime). While the station reports an answered
+call, the app opens one voice channel shared by a talker and any listeners (reference counted; it closes with the last user,
+when the call ends, or after 10 minutes). Routes: `POST /v1/stations/<n>/call/talk` (request body = mu-law frames as they are
+spoken, chunked, paced to real time with a 0.5 s lead), `GET .../call/listen` (chunked response, a bounded queue per listener
+that drops the oldest audio), `DELETE .../call`. The chime and call audio exclude each other (`busy`; `no_call` when there is
+none). In Home Assistant: `door_call.py` answers a ringing call through the cloud first (only when the station is the
+account's single device), `door_stt.py` is the Assist engine (16 kHz PCM -> 8 kHz mu-law), `views.py` the WAV listen stream.
+Format assumptions to confirm on a real call: send mu-law (known to work for the chime), receive mu-law.
+
 ## Call state
 
 `NET_DVR_GetDeviceStatus(16034)` is rejected by DS-KH6320 firmware (SDK error 23), so the

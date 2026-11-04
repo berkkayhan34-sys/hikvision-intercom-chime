@@ -18,3 +18,8 @@ restarts the app after you confirm.
   against pinned SHA-256 checksums.
 - Nothing plays unless the integration sends audio, and playback is refused while the
   station is ringing or in a call.
+
+## Call audio
+
+While a call is answered, the integration can talk into it and listen to the door through this app (see the repository
+README). The voice channel is only open during a call; nothing is recorded or stored.

@@ -314,6 +314,12 @@
     },
     "call_active": {
       "message": "İç ünite çalıyor veya görüşmede. Kesmemek için zil sesi engellendi."
+    },
+    "no_call": {
+      "message": "Cevaplanmış bir kapı görüşmesi yok. Önce görüşmeyi cevaplayın, sonra konuşun."
+    },
+    "answer_failed": {
+      "message": "İstasyon cevaplamayı kabul etmedi. İstasyondan cevaplayın veya tekrar deneyin."
     }
   }
 }

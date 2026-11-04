@@ -15,6 +15,7 @@ class FakeSdk:
         self.frames = []
         self.voice_started = 0
         self.voice_stopped = []
+        self.on_audio = None
 
     def login(self, host, port, username, password):
         if self.login_error:
@@ -30,11 +31,16 @@ class FakeSdk:
             raise SdkError("call status", self.call_error)
         return self.call
 
-    def start_voice(self, user_id):
+    def start_voice(self, user_id, on_audio=None):
         if self.voice_error:
             raise SdkError("start voice", self.voice_error)
         self.voice_started += 1
+        self.on_audio = on_audio
         return 99
+
+    def deliver(self, data):
+        """What the SDK thread does when the door sends audio."""
+        self.on_audio(data)
 
     def send_voice(self, handle, frame):
         if self.send_error_after is not None and len(self.frames) >= self.send_error_after:

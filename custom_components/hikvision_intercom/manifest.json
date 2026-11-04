@@ -11,9 +11,11 @@
   ],
   "config_flow": true,
   "dependencies": [
+    "conversation",
     "ffmpeg",
     "file_upload",
-    "http"
+    "http",
+    "stt"
   ],
   "documentation": "https://github.com/berkkayhan34-sys/hikvision-intercom-chime",
   "integration_type": "hub",
@@ -27,5 +29,5 @@
     "xmltodict",
     "paho-mqtt>=2.0"
   ],
-  "version": "0.3.0"
+  "version": "0.4.0"
 }

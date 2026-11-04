@@ -1,10 +1,15 @@
 """Authenticated JSON/HTTP API for the Home Assistant integration.
 
-Contract (all JSON except the broadcast body, which is raw PCM16LE 8 kHz mono):
+Contract (all JSON except the audio bodies: the broadcast body is raw PCM16LE 8 kHz mono, the call audio is raw 8 kHz
+G.711 mu-law, 160-byte frames):
   GET    /v1/health                      -> 200 {"status": "ok", "version": ...}   (no auth)
   GET    /v1/stations/<name>             -> 200 station status | 404
   POST   /v1/stations/<name>/broadcast   -> 202 {"duration": s} | 400 | 404 | 409 | 413 | 503
   DELETE /v1/stations/<name>/broadcast   -> 200 {"stopped": bool} | 404
+  POST   /v1/stations/<name>/call/talk   -> 200 {"frames": n} | 404 | 409 (no_call, busy) | 413 | 503; the request body
+                                            is the audio, sent while it is spoken (chunked), and ends the talk
+  GET    /v1/stations/<name>/call/listen -> 200 chunked mu-law audio of the door until the call ends | 404 | 409 | 503
+  DELETE /v1/stations/<name>/call        -> 200 {"stopped": bool} | 404
 Errors are {"error": <code>}. Everything except /v1/health needs
 ``Authorization: Bearer <token>``.
 """
@@ -16,13 +21,17 @@ import hmac
 import json
 import logging
 import re
+import sys
 
 from . import __version__
 from .station import MAX_PCM_BYTES, Station, StationError
 
 _LOGGER = logging.getLogger(__name__)
-_STATUS = {"invalid_audio": 400, "busy": 409, "call_active": 409, "station_offline": 503}
-_STATION_PATH = re.compile(r"/v1/stations/([a-z0-9][a-z0-9_-]{0,63})(/broadcast)?\Z")
+_STATUS = {"invalid_audio": 400, "busy": 409, "call_active": 409, "no_call": 409, "station_offline": 503}
+_STATION_PATH = re.compile(
+    r"/v1/stations/([a-z0-9][a-z0-9_-]{0,63})(/broadcast|/call/talk|/call/listen|/call)?\Z")
+MAX_TALK_BYTES = 8000 * 600  # ten minutes of 8 kHz mu-law
+MAX_CHUNK_BYTES = 64 * 1024
 
 
 class BridgeServer(ThreadingHTTPServer):
@@ -33,6 +42,13 @@ class BridgeServer(ThreadingHTTPServer):
         super().__init__(address, Handler)
         self.token = token.encode("utf8")
         self.stations = stations
+
+    def handle_error(self, request, client_address) -> None:
+        # A client that drops a connection (a listener closing its page) is routine, not an error worth a traceback.
+        if isinstance(sys.exc_info()[1], (ConnectionError, TimeoutError)):
+            _LOGGER.debug("client connection ended: %s", sys.exc_info()[1].__class__.__name__)
+            return
+        super().handle_error(request, client_address)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -62,7 +78,7 @@ class Handler(BaseHTTPRequestHandler):
             presented.encode("utf8"), self.server.token)
 
     def _route(self):
-        """Return (station, is_broadcast) or None after sending the error."""
+        """Return (station, suffix) or None after sending the error."""
         if not self._authorized():
             self._send(401, {"error": "unauthorized"})
             return None
@@ -71,24 +87,94 @@ class Handler(BaseHTTPRequestHandler):
         if station is None:
             self._send(404, {"error": "not_found"})
             return None
-        return station, bool(match.group(2))
+        return station, match.group(2) or ""
 
     def do_GET(self) -> None:
         if self.path == "/v1/health":
             self._send(200, {"status": "ok", "version": __version__})
             return
         routed = self._route()
-        if routed and not routed[1]:
-            self._send(200, routed[0].status())
-        elif routed:
+        if routed is None:
+            return
+        station, suffix = routed
+        if not suffix:
+            self._send(200, station.status())
+        elif suffix == "/call/listen":
+            self._listen(station)
+        else:
             self._send(404, {"error": "not_found"})
+
+    def _listen(self, station: Station) -> None:
+        try:
+            listener = station.listen()
+        except StationError as error:
+            self._send(_STATUS[error.code], {"error": error.code})
+            return
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            for data in listener:
+                self.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
+                self.wfile.flush()
+            self.wfile.write(b"0\r\n\r\n")
+        except OSError:
+            pass  # the listener went away
+        finally:
+            listener.close()
+            self.close_connection = True
+
+    def _body_chunks(self):
+        """The request body as it arrives (chunked, or one piece with a Content-Length); ValueError when malformed."""
+        total = 0
+        if "chunked" in self.headers.get("Transfer-Encoding", "").lower():
+            while True:
+                size = int(self.rfile.readline(64).split(b";", 1)[0].strip(), 16)
+                if size == 0:
+                    while self.rfile.readline(1024).strip():
+                        pass  # trailers
+                    return
+                total += size
+                if size > MAX_CHUNK_BYTES or total > MAX_TALK_BYTES:
+                    raise OverflowError
+                data = self.rfile.read(size)
+                if len(data) != size or self.rfile.readline(4) != b"\r\n":
+                    raise ValueError("truncated chunk")
+                yield data
+        else:
+            length = int(self.headers.get("Content-Length", ""))
+            if not 0 <= length <= MAX_TALK_BYTES:
+                raise OverflowError
+            while total < length:
+                data = self.rfile.read(min(MAX_CHUNK_BYTES, length - total))
+                if not data:
+                    raise ValueError("truncated body")
+                total += len(data)
+                yield data
+
+    def _talk(self, station: Station) -> None:
+        try:
+            frames = station.talk(self._body_chunks())
+        except StationError as error:
+            self._send(_STATUS[error.code], {"error": error.code})
+        except OverflowError:
+            self._send(413, {"error": "too_large"})
+        except (ValueError, OSError):
+            self._send(400, {"error": "bad_request"})
+        else:
+            self._send(200, {"frames": frames})
 
     def do_POST(self) -> None:
         routed = self._route()
         if routed is None:
             return
-        station, is_broadcast = routed
-        if not is_broadcast:
+        station, suffix = routed
+        if suffix == "/call/talk":
+            self._talk(station)
+            return
+        if suffix != "/broadcast":
             self._send(404, {"error": "not_found"})
             return
         if self.headers.get("Transfer-Encoding"):
@@ -112,7 +198,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         routed = self._route()
-        if routed and routed[1]:
-            self._send(200, {"stopped": routed[0].stop_broadcast()})
-        elif routed:
+        if routed is None:
+            return
+        station, suffix = routed
+        if suffix == "/broadcast":
+            self._send(200, {"stopped": station.stop_broadcast()})
+        elif suffix == "/call":
+            self._send(200, {"stopped": station.stop_call_audio()})
+        else:
             self._send(404, {"error": "not_found"})

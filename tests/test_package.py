@@ -35,7 +35,7 @@ class PackageTests(unittest.TestCase):
         self.assertTrue(manifest["config_flow"])
         self.assertEqual(list(manifest)[:2], ["domain", "name"])  # hassfest key order
         self.assertEqual(list(manifest)[2:], sorted(list(manifest)[2:]))
-        self.assertEqual(manifest["dependencies"], ["ffmpeg", "file_upload", "http"])
+        self.assertEqual(manifest["dependencies"], ["conversation", "ffmpeg", "file_upload", "http", "stt"])
         for key in ("name", "version", "documentation", "issue_tracker", "codeowners"):
             self.assertTrue(manifest[key])
 

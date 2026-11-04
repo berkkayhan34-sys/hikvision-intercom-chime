@@ -61,6 +61,13 @@ class AppLink:
         self._client = BridgeClient(async_get_clientsession(self._hass), app.hostname, token)
         return self._client
 
+    async def client(self) -> BridgeClient:
+        """The current client, for streaming calls that cannot be retried half way."""
+        return self._client or await self._resolve()
+
+    def invalidate(self) -> None:
+        self._client = None
+
     async def call(self, operation: Callable):
         """Run ``operation(client)``; on a stale route or token, resolve once and retry."""
         client = self._client or await self._resolve()

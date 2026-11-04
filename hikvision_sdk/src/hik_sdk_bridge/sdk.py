@@ -9,6 +9,7 @@ supported ABI. Error text never includes host, user name or password.
 from __future__ import annotations
 
 import ctypes
+import logging
 from ctypes import (
     POINTER, Structure, addressof, byref, c_char_p, c_int, c_ubyte, c_uint, c_ushort,
     c_void_p, create_string_buffer, sizeof,
@@ -70,11 +71,18 @@ class XmlConfigOutput(Structure):
     ]
 
 
+# fVoiceDataCallBack(voice handle, buffer, size, audio flag, user data); the flag is 0 for audio the SDK collected locally
+# (there is none: audio is only sent from here) and non-zero for audio the device sends back, which for a call is the door.
+_VOICE_CALLBACK = ctypes.CFUNCTYPE(None, c_int, c_void_p, c_uint, c_ubyte, c_void_p)
+_LOGGER = logging.getLogger(__name__)
+
+
 class Sdk:
     """One loaded library; every method maps one SDK call and raises SdkError."""
 
     def __init__(self, lib) -> None:
         self._lib = lib
+        self._voice_callbacks: dict[int, object] = {}  # kept alive until the voice channel stops
         lib.NET_DVR_Login_V30.argtypes = [c_char_p, c_ushort, c_char_p, c_char_p,
                                           POINTER(DeviceInfoV30)]
         lib.NET_DVR_Login_V30.restype = c_int
@@ -153,10 +161,24 @@ class Sdk:
             return "in_call"
         return "unknown"
 
-    def start_voice(self, user_id: int) -> int:
-        handle = self._lib.NET_DVR_StartVoiceCom_MR_V30(user_id, 1, None, None)
+    def start_voice(self, user_id: int, on_audio=None) -> int:
+        """Open a voice channel; ``on_audio(bytes)`` receives what the device sends back (G.711), on the SDK's thread."""
+        callback = None
+        if on_audio is not None:
+            def receive(handle, buffer, size, flag, user) -> None:
+                if flag == 0 or not size or not buffer:
+                    return
+                try:
+                    on_audio(ctypes.string_at(buffer, size))
+                except Exception:  # noqa: BLE001 - nothing may propagate into the SDK's thread
+                    _LOGGER.debug("device audio handler failed", exc_info=True)
+
+            callback = _VOICE_CALLBACK(receive)
+        handle = self._lib.NET_DVR_StartVoiceCom_MR_V30(user_id, 1, callback, None)
         if handle < 0:
             raise self._fail("start voice")
+        if callback is not None:
+            self._voice_callbacks[handle] = callback
         return handle
 
     def send_voice(self, handle: int, frame: bytes) -> None:
@@ -166,3 +188,4 @@ class Sdk:
 
     def stop_voice(self, handle: int) -> None:
         self._lib.NET_DVR_StopVoiceCom(handle)
+        self._voice_callbacks.pop(handle, None)

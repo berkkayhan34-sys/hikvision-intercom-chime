@@ -125,3 +125,103 @@ def test_missing_content_length_is_411(api):
 def test_delete_is_idempotent(api):
     call, _ = api
     assert call("DELETE", "/v1/stations/hall/broadcast") == (200, {"stopped": False})
+
+
+# --- call audio over HTTP -------------------------------------------------------------------------------------------
+def raw(api, method, path, body=None, headers=None, encode_chunked=False, token=TOKEN):
+    call, _ = api
+    connection = http.client.HTTPConnection("127.0.0.1", call.port, timeout=5)
+    send = {"Authorization": f"Bearer {token}"} if token else {}
+    send.update(headers or {})
+    connection.request(method, path, body=body, headers=send, encode_chunked=encode_chunked)
+    return connection, connection.getresponse()
+
+
+def test_talk_needs_the_token(api):
+    _, response = raw(api, "POST", "/v1/stations/hall/call/talk", body=b"", token=None)
+    assert response.status == 401
+
+
+def test_talk_without_a_call_is_refused_with_no_call(api):
+    connection, response = raw(api, "POST", "/v1/stations/hall/call/talk", body=iter([b"\xff" * 160]), encode_chunked=True)
+    assert response.status == 409 and json.loads(response.read()) == {"error": "no_call"}
+    connection.close()
+
+
+def test_talk_sends_the_chunked_body_into_the_call(api):
+    _, sdk = api
+    sdk.call = "in_call"
+    audio = [bytes([n]) * 160 for n in range(4)]
+    connection, response = raw(api, "POST", "/v1/stations/hall/call/talk", body=iter(audio), encode_chunked=True)
+    assert response.status == 200 and json.loads(response.read()) == {"frames": 4}
+    assert sdk.frames == audio
+    connection.close()
+
+
+def test_talk_accepts_a_plain_content_length_body_too(api):
+    _, sdk = api
+    sdk.call = "in_call"
+    connection, response = raw(api, "POST", "/v1/stations/hall/call/talk", body=b"\x01" * 320)
+    assert response.status == 200 and len(sdk.frames) == 2
+    connection.close()
+
+
+def test_an_oversized_chunk_is_refused(api):
+    _, sdk = api
+    sdk.call = "in_call"
+    connection, response = raw(api, "POST", "/v1/stations/hall/call/talk", body=iter([b"\x00" * 70000]), encode_chunked=True)
+    assert response.status == 413
+    connection.close()
+
+
+def test_listen_streams_the_door_audio_until_the_call_ends(api):
+    _, sdk = api
+    sdk.call = "in_call"
+    connection, response = raw(api, "GET", "/v1/stations/hall/call/listen")
+    assert response.status == 200 and response.getheader("Transfer-Encoding") == "chunked"
+    sdk.deliver(b"a" * 160)
+    sdk.deliver(b"b" * 160)
+    assert response.read(320) == b"a" * 160 + b"b" * 160
+    sdk.call = "idle"
+    call, _ = api
+    call("GET", "/v1/stations/hall")  # the integration's poll notices the call is over
+    assert response.read() == b""  # the stream ends cleanly
+    connection.close()
+    assert sdk.voice_stopped == [99]
+
+
+def test_listen_stops_the_channel_when_the_client_disconnects(api):
+    _, sdk = api
+    sdk.call = "in_call"
+    connection, response = raw(api, "GET", "/v1/stations/hall/call/listen")
+    sdk.deliver(b"a" * 160)
+    response.read(160)
+    connection.close()
+    for _ in range(300):
+        sdk.deliver(b"z" * 160)  # the next writes fail once the socket is gone
+        if sdk.voice_stopped:
+            break
+        threading.Event().wait(0.01)
+    assert sdk.voice_stopped == [99]
+
+
+def test_listen_without_a_call_is_refused(api):
+    connection, response = raw(api, "GET", "/v1/stations/hall/call/listen")
+    assert response.status == 409 and json.loads(response.read()) == {"error": "no_call"}
+    connection.close()
+
+
+def test_delete_call_stops_our_channel(api):
+    call, sdk = api
+    sdk.call = "in_call"
+    connection, response = raw(api, "GET", "/v1/stations/hall/call/listen")
+    assert call("DELETE", "/v1/stations/hall/call") == (200, {"stopped": True})
+    assert call("DELETE", "/v1/stations/hall/call") == (200, {"stopped": False})
+    connection.close()
+
+
+def test_unknown_call_paths_are_404(api):
+    call, _ = api
+    assert call("GET", "/v1/stations/hall/call")[0] == 404
+    assert call("POST", "/v1/stations/hall/call/listen", body=b"")[0] == 404
+    assert call("DELETE", "/v1/stations/hall/call/talk")[0] == 404
