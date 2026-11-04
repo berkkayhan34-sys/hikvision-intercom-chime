@@ -6,7 +6,7 @@ from pathlib import Path
 from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[1]
-DOMAIN = "hikvision_intercom_chime"
+DOMAIN = "hikvision_intercom"
 
 
 def package_files():
@@ -15,7 +15,7 @@ def package_files():
     paths.extend(path for path in (ROOT / "custom_components" / DOMAIN).rglob("*")
                  if path.is_file() and "__pycache__" not in path.parts)
     for path in sorted(paths):
-        if path.is_symlink() or path.suffix not in {".py", ".json", ".wav", ".md", ".png"}:
+        if path.is_symlink() or path.suffix not in {".py", ".json", ".wav", ".md", ".png", ".pem"}:
             raise ValueError("Unexpected package file")
         yield path
 
@@ -37,7 +37,7 @@ def build(destination: Path):
 
 if __name__ == "__main__":
     version = json.loads((ROOT / "custom_components" / DOMAIN / "manifest.json").read_text())["version"]
-    target = ROOT / "dist" / f"hikvision-intercom-chime-{version}-local.zip"
+    target = ROOT / "dist" / f"hikvision-intercom-{version}-local.zip"
     digest, count = build(target)
     target.with_suffix(".zip.sha256").write_text(f"{digest}  {target.name}\n", encoding="ascii")
     print(f"Files: {count}; SHA256: {digest}\n{target}")

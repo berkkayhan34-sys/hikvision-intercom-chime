@@ -1,0 +1,41 @@
+name: CI
+on:
+  push: {branches: [main]}
+  pull_request:
+jobs:
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hacs/action@main
+        with: {category: integration}
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: >
+          uv venv --python 3.14 &&
+          uv pip install pytest-homeassistant-custom-component pycryptodome xmltodict
+          "paho-mqtt>=2.0" aiohasupervisor ha-ffmpeg PyTurboJPEG
+          hassil==3.12.1 home-assistant-intents==2026.10.6 gazetteer-matcher==1.1.0
+          pymicro-vad==1.0.1 pyspeex-noise==1.0.2 mutagen==1.48.1
+      - run: .venv/bin/python -m pytest -q
+  app-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build --build-arg BUILD_ARCH=amd64 -t hik-sdk-bridge hikvision_sdk
+      - name: The image starts, loads the real SDK and serves its API
+        run: |
+          mkdir data
+          echo '{"token":"0123456789012345678901234567890123456789","stations":[]}' > data/options.json
+          docker run -d --name bridge -v "$PWD/data:/data:ro" -p 8099:8099 hik-sdk-bridge
+          for i in $(seq 1 20); do curl -fs localhost:8099/v1/health && break; sleep 1; done
+          curl -fs localhost:8099/v1/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8099/v1/stations/x)" = 401

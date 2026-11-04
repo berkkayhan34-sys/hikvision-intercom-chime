@@ -1,0 +1,325 @@
+{
+  "title": "Hikvision Intercom",
+  "config": {
+    "step": {
+      "app": {
+        "title": "Hikvision SDK Bridge uygulamasını kurun",
+        "description": "Zil sesi için Hikvision SDK Bridge uygulaması gerekir; bu entegrasyon onsuz çalışmaz. Uygulamayı kurun, ardından tekrar kontrol için Gönder'e basın.\n\n1. [Uygulama deposunu ekleyin]({add_repository_link}) (veya Ayarlar → Uygulamalar → Uygulama mağazası → Depolar bölümüne `{repository_url}` ekleyin).\n2. **Hikvision SDK Bridge** uygulamasını kurun. Durdurulmuş kalabilir; entegrasyon onu başlatır.\n3. Buraya dönüp Gönder'e basın."
+      },
+      "account": {
+        "title": "Hikvision Intercom",
+        "description": "Hik-Connect hesabınızla giriş yapın. Canlı görüntü doğrudan istasyondan yerel ağınız üzerinden gelir; cihaz keşfi ve denetimler (kapı açma, çağrılar, ses seviyeleri) Hik-Connect bulutu üzerinden yürür. Sonraki adımda zil sesi için yerel istasyon bağlanır.",
+        "data": {
+          "account": "Hesap (e-posta veya kullanıcı adı)",
+          "password": "Parola",
+          "server": "Sunucu",
+          "base_url": "Özel API adresi (yalnızca Sunucu 'Özel' iken)"
+        },
+        "data_description": {
+          "server": "Bölgenizi seçin veya özel bir API adresi girmek için Özel'i seçin. Küresel seçenek doğru bölgeye otomatik yönlendirir.",
+          "base_url": "örn. apiieu.hik-connect.com — yalnızca Sunucu 'Özel' seçiliyken kullanılır."
+        }
+      },
+      "station": {
+        "title": "İç ünite bağlantısı",
+        "description": "İstasyonun yönetici parolasını kullanın, Hik-Connect parolasını değil. Yalnızca SDK Bridge uygulaması saklar; bu entegrasyon saklamaz.",
+        "data": {
+          "host": "İstasyon IP adresi",
+          "port": "SDK portu",
+          "username": "Yönetici kullanıcı adı",
+          "password": "İstasyon yönetici parolası"
+        }
+      },
+      "confirm": {
+        "title": "Uygulama yapılandırmasını onayla",
+        "description": "SDK Bridge uygulamasının istasyon listesi güncellenecek ve gerekirse uygulama başlatılacak/yeniden başlatılacak; uygulamadaki diğer istasyonların bağlantısı kısa süre kopabilir. Kilit açma, alarm, ürün yazılımı veya ses çalma işlemi yapılmaz.",
+        "data": {
+          "confirm_restart": "Uygulama yapılandırmasını ve gerekirse yeniden başlatmayı onaylıyorum"
+        }
+      },
+      "reconfigure": {
+        "title": "Hikvision Intercom",
+        "description": "Bu entegrasyonun sunucusunu veya hesabını değiştirin. Mevcut parolayı korumak için parolayı boş bırakın.",
+        "data": {
+          "account": "Hesap (e-posta veya kullanıcı adı)",
+          "password": "Parola (boş = mevcut kalsın)",
+          "server": "Sunucu",
+          "base_url": "Özel API adresi (yalnızca Sunucu 'Özel' iken)"
+        },
+        "data_description": {
+          "server": "Bölgenizi seçin veya özel bir API adresi girmek için Özel'i seçin. Küresel seçenek doğru bölgeye otomatik yönlendirir.",
+          "base_url": "örn. apiieu.hik-connect.com — yalnızca Sunucu 'Özel' seçiliyken kullanılır."
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Hesap veya parola geçersiz (CAPTCHA gerekebilir — Hik-Connect uygulamasını bir kez açıp tekrar deneyin).",
+      "cannot_connect": "Hik-Connect'e ulaşılamadı.",
+      "custom_url_required": "Bir sunucu seçin veya Özel'i seçip bir API adresi girin.",
+      "invalid_host": "URL veya genel IP yerine cihazın özel IPv4 adresini gir.",
+      "invalid_port": "SDK portu 1 ile 65535 arasında tam sayı olmalı.",
+      "invalid_credentials": "Cihaz admin kullanıcı adı ve parolasını gir; her biri en fazla 64 UTF-8 bayt olmalı ve kontrol karakteri içermemeli.",
+      "confirmation_required": "Devam etmek için uygulama yapılandırmasını ve yeniden başlatmayı onaylayın.",
+      "app_ambiguous": "Birden fazla Hikvision SDK Bridge uygulaması kurulu. Birini bırakıp tekrar deneyin.",
+      "app_config_failed": "Uygulama yapılandırması veya başlatma başarısız. Önceki ayarlar geri yüklendi. Uygulamayı kontrol edip tekrar deneyin.",
+      "app_rollback_failed": "Uygulama kurulumu VE geri yükleme başarısız. Uygulama yapılandırmasını Home Assistant yedeğinizden geri yükleyin.",
+      "duplicate_station": "Köprüdeki başka bir istasyon bu adresi zaten kullanıyor.",
+      "app_required": "Hikvision SDK Bridge uygulaması henüz kurulu değil. Yukarıda anlatıldığı gibi kurun, ardından Gönder'e basın."
+    },
+    "abort": {
+      "already_configured": "Bu hesap zaten yapılandırılmış.",
+      "account_mismatch": "Hesap, entegrasyonun kurulduğu hesapla aynı olmalıdır. Başka bir hesap için yeni bir entegrasyon ekleyin.",
+      "reconfigure_successful": "Sunucu güncellendi.",
+      "supervisor_required": "Home Assistant OS veya Supervised gerekir: zil sesi için Hikvision SDK Bridge uygulaması gerekir. Windows uygulaması gerekmez.",
+      "setup_expired": "Kurulum oturumu süresi doldu. Baştan başlayın."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hikvision Intercom seçenekleri",
+        "data": {
+          "call_poll_interval": "Çağrı durumu sorgulama aralığı",
+          "native_stream": "Canlı video akışı"
+        },
+        "data_description": {
+          "call_poll_interval": "Bulut çağrı durumu sorguları arasındaki saniye. Anlık bildirim zil çalmasını zaten hemen bildirir; daha kısa aralık yalnızca bildirim yokken işe yarar ve daha çok bulut isteği demektir.",
+          "native_stream": "Yerel akışlar istasyonun kendi görüntüsünü MJPEG'e dönüştürmeden Home Assistant'a (WebRTC/HLS, `video_codec: copy` ile HomeKit Bridge) iletir: daha az işlemci kullanımı ve daha hızlı başlangıç. Çoğu tarayıcı ve HomeKit H.265 oynatamaz; bu yüzden eklemediğiniz sürece H.265 kanalları MJPEG kullanır."
+        }
+      }
+    }
+  },
+  "selector": {
+    "native_stream": {
+      "options": {
+        "off": "Yalnızca MJPEG",
+        "h264": "Yerel H.264, H.265 MJPEG olarak",
+        "all": "Yerel H.264 ve H.265"
+      }
+    }
+  },
+  "config_subentries": {
+    "station": {
+      "entry_type": "Yerel istasyon",
+      "initiate_flow": {
+        "user": "Yerel istasyon ekle"
+      },
+      "step": {
+        "user": {
+          "title": "Ön koşullar",
+          "description": "Hikvision SDK Bridge uygulaması kurulu olmalıdır. Eksik ön koşulu giderin, ardından tekrar kontrol için Gönder'e basın. Bu adım asla ses çalmaz."
+        },
+        "connection": {
+          "title": "İç ünite bağlantısı",
+          "description": "İstasyonun yönetici parolasını kullanın, Hik-Connect parolasını değil. Yalnızca SDK Bridge uygulaması saklar; bu entegrasyon saklamaz.",
+          "data": {
+            "title": "Ad",
+            "host": "İstasyon IP adresi",
+            "port": "SDK portu",
+            "username": "Yönetici kullanıcı adı",
+            "password": "İstasyon yönetici parolası"
+          }
+        },
+        "confirm": {
+          "title": "Uygulama yapılandırmasını onayla",
+          "description": "SDK Bridge uygulamasının istasyon listesi güncellenecek ve gerekirse uygulama başlatılacak/yeniden başlatılacak; uygulamadaki diğer istasyonların bağlantısı kısa süre kopabilir. Kilit açma, alarm, ürün yazılımı veya ses çalma işlemi yapılmaz.",
+          "data": {
+            "confirm_restart": "Uygulama yapılandırmasını ve gerekirse yeniden başlatmayı onaylıyorum"
+          }
+        },
+        "reconfigure": {
+          "title": "Zil sesi",
+          "description": "Dosya isteğe bağlıdır. WAV: 8000 Hz, mono, 16 bit PCM, en fazla 1 MiB ve 30 saniye. Tekrarlarla toplam süre 60 saniyeyi aşamaz. Pozitif kazanç bozulmaya yol açabilir ve cihazın donanım ses sınırını artırmaz. Kaydetmek asla ses çalmaz.",
+          "data": {
+            "audio_file": "WAV ses dosyası",
+            "gain_db": "Dijital kazanç (dB)",
+            "repeats": "Tekrar sayısı"
+          }
+        }
+      },
+      "error": {
+        "invalid_host": "URL veya genel IP yerine cihazın özel IPv4 adresini gir.",
+        "invalid_port": "SDK portu 1 ile 65535 arasında tam sayı olmalı.",
+        "invalid_credentials": "Cihaz admin kullanıcı adı ve parolasını gir; her biri en fazla 64 UTF-8 bayt olmalı ve kontrol karakteri içermemeli.",
+        "invalid_gain": "Gain -30 ile +30 dB arasında sonlu bir sayı olmalı.",
+        "invalid_repeats": "Tekrar sayısı 1 ile 10 arasında tam sayı olmalı.",
+        "invalid_file_size": "WAV dosyası boş olmamalı ve 1 MiB boyutunu aşmamalı.",
+        "invalid_wav": "Yüklenen dosya geçerli bir desteklenen WAV değil.",
+        "unsupported_wav": "Sıkıştırılmamış 8000 Hz, mono, 16-bit PCM WAV kullan. Diğer biçimleri yüklemeden önce dönüştür.",
+        "invalid_duration": "Kaynak ses sıfırdan uzun ve en fazla 30 saniye olmalı.",
+        "truncated_wav": "WAV dosyası eksik. Tam dosyayı yeniden yükle.",
+        "total_duration_exceeded": "Ses süresi ile tekrar sayısının çarpımı 60 saniyeyi aşmamalı.",
+        "busy": "Bir zil işlemi zaten sürüyor. Yeni işlem kuyruğa alınmadı.",
+        "unsafe_storage": "Ses deposunda güvenli olmayan bağlantı veya tutarsız dosya var. Yerel depoyu kontrol et.",
+        "invalid_storage_id": "Entegrasyona ait ses tanımlayıcısı geçersiz.",
+        "source_limit": "Cihaz başına 16 farklı ses yükleme sınırına ulaşıldı. Mevcut sesler korundu.",
+        "integration_not_ready": "Entegrasyon yüklenmemiş. Ses ayarından önce kurulum hatasını düzelt.",
+        "confirmation_required": "Devam etmek için uygulama yapılandırmasını ve yeniden başlatmayı onaylayın.",
+        "supervisor_required": "Zil sesi için Home Assistant OS veya Supervised gerekir. Windows uygulaması gerekmez.",
+        "app_required": "Hikvision SDK Bridge uygulamasını uygulama deposundan kurun (deponun README dosyasına bakın) ve tekrar deneyin.",
+        "app_ambiguous": "Birden fazla Hikvision SDK Bridge uygulaması kurulu. Birini bırakıp tekrar deneyin.",
+        "app_stopped": "Hikvision SDK Bridge uygulaması durmuş. Elle başlatın.",
+        "app_unconfigured": "Hikvision SDK Bridge uygulamasında henüz API anahtarı yok. Yapılandırmak için bir istasyon ekleyin.",
+        "app_unreachable": "Hikvision SDK Bridge uygulamasına ulaşılamıyor. Çalıştığını kontrol edin.",
+        "app_unauthorized": "Hikvision SDK Bridge uygulaması entegrasyonun anahtarını reddetti. İstasyonu yeniden yapılandırın.",
+        "app_error": "Hikvision SDK Bridge uygulaması beklenmeyen bir hata döndürdü. Günlüğüne bakın.",
+        "app_config_failed": "Uygulama yapılandırması veya başlatma başarısız. Önceki ayarlar geri yüklendi. Uygulamayı kontrol edip tekrar deneyin.",
+        "app_rollback_failed": "Uygulama kurulumu VE geri yükleme başarısız. Uygulama yapılandırmasını Home Assistant yedeğinizden geri yükleyin.",
+        "station_offline": "İç ünite SDK köprüsüne bağlı değil. Adresini ve parolasını kontrol edin.",
+        "station_unknown": "SDK köprüsü bu istasyonu tanımıyor. Yeniden yapılandırın veya yeniden ekleyin.",
+        "duplicate_station": "Köprüdeki başka bir istasyon bu adresi zaten kullanıyor.",
+        "invalid_audio": "Ses SDK köprüsü tarafından reddedildi. Ses ayarlarını yeniden kaydedin.",
+        "playback_request_failed": "Zil sesi isteği başarısız oldu. Sesin çaldığı doğrulanmadı.",
+        "stop_request_failed": "Durdurma isteği iletilemedi. İç üniteyi kontrol edin.",
+        "storage_unavailable": "Ses depolaması kullanılamıyor. Home Assistant depolama klasörünü kontrol edin.",
+        "call_active": "İç ünite çalıyor veya görüşmede. Kesmemek için zil sesi engellendi."
+      },
+      "abort": {
+        "already_configured": "Bu istasyon zaten yapılandırılmış.",
+        "setup_expired": "Kurulum oturumu zaman aşımına uğradı. Baştan başlayın.",
+        "reconfigure_successful": "Zil sesi kaydedildi."
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "play": {
+        "name": "Zil çal"
+      },
+      "stop": {
+        "name": "Zili durdur"
+      }
+    },
+    "number": {
+      "gain_db": {
+        "name": "Dijital gain"
+      },
+      "repeats": {
+        "name": "Tekrar sayısı"
+      }
+    },
+    "sensor": {
+      "status": {
+        "name": "İstek durumu",
+        "state": {
+          "idle": "Boşta",
+          "sending": "Ses istendi",
+          "error": "Hata"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_host": {
+      "message": "URL veya genel IP yerine cihazın özel IPv4 adresini gir."
+    },
+    "invalid_port": {
+      "message": "SDK portu 1 ile 65535 arasında tam sayı olmalı."
+    },
+    "invalid_credentials": {
+      "message": "Cihaz admin kullanıcı adı ve parolasını gir; her biri en fazla 64 UTF-8 bayt olmalı ve kontrol karakteri içermemeli."
+    },
+    "invalid_gain": {
+      "message": "Gain -30 ile +30 dB arasında sonlu bir sayı olmalı."
+    },
+    "invalid_repeats": {
+      "message": "Tekrar sayısı 1 ile 10 arasında tam sayı olmalı."
+    },
+    "invalid_file_size": {
+      "message": "WAV dosyası boş olmamalı ve 1 MiB boyutunu aşmamalı."
+    },
+    "invalid_wav": {
+      "message": "Yüklenen dosya geçerli bir desteklenen WAV değil."
+    },
+    "unsupported_wav": {
+      "message": "Sıkıştırılmamış 8000 Hz, mono, 16-bit PCM WAV kullan. Diğer biçimleri yüklemeden önce dönüştür."
+    },
+    "invalid_duration": {
+      "message": "Kaynak ses sıfırdan uzun ve en fazla 30 saniye olmalı."
+    },
+    "truncated_wav": {
+      "message": "WAV dosyası eksik. Tam dosyayı yeniden yükle."
+    },
+    "total_duration_exceeded": {
+      "message": "Ses süresi ile tekrar sayısının çarpımı 60 saniyeyi aşmamalı."
+    },
+    "busy": {
+      "message": "Bir zil işlemi zaten sürüyor. Yeni işlem kuyruğa alınmadı."
+    },
+    "unsafe_storage": {
+      "message": "Ses deposunda güvenli olmayan bağlantı veya tutarsız dosya var. Yerel depoyu kontrol et."
+    },
+    "invalid_storage_id": {
+      "message": "Entegrasyona ait ses tanımlayıcısı geçersiz."
+    },
+    "source_limit": {
+      "message": "Cihaz başına 16 farklı ses yükleme sınırına ulaşıldı. Mevcut sesler korundu."
+    },
+    "integration_not_ready": {
+      "message": "Entegrasyon yüklenmemiş. Ses ayarından önce kurulum hatasını düzelt."
+    },
+    "confirmation_required": {
+      "message": "Devam etmek için uygulama yapılandırmasını ve yeniden başlatmayı onaylayın."
+    },
+    "supervisor_required": {
+      "message": "Zil sesi için Home Assistant OS veya Supervised gerekir. Windows uygulaması gerekmez."
+    },
+    "app_required": {
+      "message": "Hikvision SDK Bridge uygulamasını uygulama deposundan kurun (deponun README dosyasına bakın) ve tekrar deneyin."
+    },
+    "app_ambiguous": {
+      "message": "Birden fazla Hikvision SDK Bridge uygulaması kurulu. Birini bırakıp tekrar deneyin."
+    },
+    "app_stopped": {
+      "message": "Hikvision SDK Bridge uygulaması durmuş. Elle başlatın."
+    },
+    "app_unconfigured": {
+      "message": "Hikvision SDK Bridge uygulamasında henüz API anahtarı yok. Yapılandırmak için bir istasyon ekleyin."
+    },
+    "app_unreachable": {
+      "message": "Hikvision SDK Bridge uygulamasına ulaşılamıyor. Çalıştığını kontrol edin."
+    },
+    "app_unauthorized": {
+      "message": "Hikvision SDK Bridge uygulaması entegrasyonun anahtarını reddetti. İstasyonu yeniden yapılandırın."
+    },
+    "app_error": {
+      "message": "Hikvision SDK Bridge uygulaması beklenmeyen bir hata döndürdü. Günlüğüne bakın."
+    },
+    "app_config_failed": {
+      "message": "Uygulama yapılandırması veya başlatma başarısız. Önceki ayarlar geri yüklendi. Uygulamayı kontrol edip tekrar deneyin."
+    },
+    "app_rollback_failed": {
+      "message": "Uygulama kurulumu VE geri yükleme başarısız. Uygulama yapılandırmasını Home Assistant yedeğinizden geri yükleyin."
+    },
+    "station_offline": {
+      "message": "İç ünite SDK köprüsüne bağlı değil. Adresini ve parolasını kontrol edin."
+    },
+    "station_unknown": {
+      "message": "SDK köprüsü bu istasyonu tanımıyor. Yeniden yapılandırın veya yeniden ekleyin."
+    },
+    "duplicate_station": {
+      "message": "Köprüdeki başka bir istasyon bu adresi zaten kullanıyor."
+    },
+    "invalid_audio": {
+      "message": "Ses SDK köprüsü tarafından reddedildi. Ses ayarlarını yeniden kaydedin."
+    },
+    "playback_request_failed": {
+      "message": "Zil sesi isteği başarısız oldu. Sesin çaldığı doğrulanmadı."
+    },
+    "stop_request_failed": {
+      "message": "Durdurma isteği iletilemedi. İç üniteyi kontrol edin."
+    },
+    "storage_unavailable": {
+      "message": "Ses depolaması kullanılamıyor. Home Assistant depolama klasörünü kontrol edin."
+    },
+    "call_active": {
+      "message": "İç ünite çalıyor veya görüşmede. Kesmemek için zil sesi engellendi."
+    },
+    "no_call": {
+      "message": "Cevaplanmış bir kapı görüşmesi yok. Önce görüşmeyi cevaplayın, sonra konuşun."
+    },
+    "answer_failed": {
+      "message": "İstasyon cevaplamayı kabul etmedi. İstasyondan cevaplayın veya tekrar deneyin."
+    }
+  }
+}

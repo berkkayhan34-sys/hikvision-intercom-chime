@@ -10,7 +10,7 @@ import unittest
 from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
-COMPONENT = ROOT / "custom_components" / "hikvision_intercom_chime"
+COMPONENT = ROOT / "custom_components" / "hikvision_intercom"
 
 
 def leaf_keys(value, prefix=""):
@@ -33,7 +33,9 @@ class PackageTests(unittest.TestCase):
         manifest = json.loads((COMPONENT / "manifest.json").read_text())
         self.assertEqual(manifest["domain"], COMPONENT.name)
         self.assertTrue(manifest["config_flow"])
-        self.assertEqual(manifest["requirements"], [])
+        self.assertEqual(list(manifest)[:2], ["domain", "name"])  # hassfest key order
+        self.assertEqual(list(manifest)[2:], sorted(list(manifest)[2:]))
+        self.assertEqual(manifest["dependencies"], ["conversation", "ffmpeg", "file_upload", "http", "stt"])
         for key in ("name", "version", "documentation", "issue_tracker", "codeowners"):
             self.assertTrue(manifest[key])
 
@@ -44,17 +46,24 @@ class PackageTests(unittest.TestCase):
             self.assertEqual(leaf_keys(original), leaf_keys(translated))
 
     def test_fixed_errors_have_ui_translations(self):
-        translations = json.loads((COMPONENT / "strings.json").read_text(encoding="utf8"))
-        codes = set()
+        strings = json.loads((COMPONENT / "strings.json").read_text(encoding="utf8"))
+        flow_errors = strings["config_subentries"]["station"]["error"].keys()
+        exceptions = strings["exceptions"].keys()
+        flow_visible, runtime_visible = set(), set()
         for path in COMPONENT.glob("*.py"):
             for node in ast.walk(ast.parse(path.read_text(encoding="utf8"))):
                 if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                        and node.func.id in {"AudioError", "SetupError", "ChimeError"}
                         and node.args and isinstance(node.args[0], ast.Constant)):
-                    codes.add(node.args[0].value)
-        self.assertLessEqual(codes, translations["exceptions"].keys())
-        self.assertLessEqual(codes, translations["config"]["error"].keys())
-        self.assertLessEqual(codes, translations["options"]["error"].keys())
+                    if node.func.id in {"AudioError", "SetupError"}:
+                        flow_visible.add(node.args[0].value)
+                    if node.func.id in {"AudioError", "SetupError", "ChimeError", "BridgeError"}:
+                        runtime_visible.add(node.args[0].value)
+        from custom_components.hikvision_intercom.bridge_client import _HTTP_CODES
+        runtime_visible |= set(_HTTP_CODES.values()) | {"busy", "call_active", "app_error"}
+        self.assertLessEqual(flow_visible, flow_errors)
+        self.assertLessEqual(runtime_visible, exceptions)
+        # the flow also shows these directly
+        self.assertLessEqual({"integration_not_ready", "confirmation_required", "invalid_wav"}, flow_errors)
 
     def test_archive_reproducible_and_contains_no_sdk_or_private_artifacts(self):
         spec = importlib.util.spec_from_file_location("build_chime_package", ROOT / "tools" / "build_package.py")
@@ -65,8 +74,8 @@ class PackageTests(unittest.TestCase):
             self.assertEqual(builder.build(first), builder.build(second))
             with ZipFile(first) as archive:
                 names = archive.namelist()
-                self.assertIn("custom_components/hikvision_intercom_chime/assets/ding_dong.wav", names)
-                self.assertIn("custom_components/hikvision_intercom_chime/brand/icon.png", names)
+                self.assertIn("custom_components/hikvision_intercom/assets/ding_dong.wav", names)
+                self.assertIn("custom_components/hikvision_intercom/brand/icon.png", names)
                 for name in names:
                     self.assertNotIn("..", Path(name).parts)
                     self.assertFalse(any(part in {".git", "__pycache__", ".storage", "tests"}

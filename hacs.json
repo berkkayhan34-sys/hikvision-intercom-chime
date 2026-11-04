@@ -1,5 +1,5 @@
 {
-  "name": "Hikvision Intercom Chime",
+  "name": "Hikvision Intercom",
   "homeassistant": "2026.10.0",
   "render_readme": true
 }

@@ -3,11 +3,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from support import load
-from test_audio import wav
+from custom_components.hikvision_intercom import storage
+from custom_components.hikvision_intercom.audio import AudioError
 
-storage = load("storage")
-AudioError = load("audio").AudioError
+from .test_audio import wav
 
 
 class StorageTests(unittest.TestCase):
@@ -35,17 +34,14 @@ class StorageTests(unittest.TestCase):
             with self.assertRaises(AudioError): storage.AudioStore(self.root, name)
             with self.assertRaises(AudioError): self.store.source(name)
 
-    def test_failed_atomic_replace_preserves_old_file(self):
+    def test_failed_atomic_write_leaves_no_partial_or_temporary_file(self):
         from unittest.mock import patch
-        self.store.write_rendered(b"old")
         with patch.object(storage.os, "replace", side_effect=OSError("failure")):
-            with self.assertRaises(OSError): self.store.write_rendered(b"new")
-        self.assertEqual((self.store.directory / "rendered.wav").read_bytes(), b"old")
-        self.assertFalse(list(self.store.directory.glob(".chime-*")))
+            with self.assertRaises(OSError): self.store.add_source(wav())
+        self.assertEqual(list(self.store.directory.iterdir()), [])
 
     def test_removal_is_owned_files_only(self):
         self.store.add_source(wav())
-        self.store.write_rendered(b"generated")
         unrelated = self.store.directory / "user-note.txt"
         unrelated.write_text("preserve", encoding="utf8")
         self.store.remove_owned_files()
