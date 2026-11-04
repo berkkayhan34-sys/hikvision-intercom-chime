@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+testpaths = ["tests", "hikvision_sdk/tests"]
+pythonpath = ["hikvision_sdk/src"]
+asyncio_mode = "auto"

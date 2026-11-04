@@ -1,0 +1,22 @@
+name: Hikvision SDK Bridge
+version: "0.1.0"
+slug: hikvision_sdk
+description: Local bridge that lets the Hikvision Intercom integration play sounds on an indoor station.
+url: https://github.com/berkkayhan34-sys/hikvision-intercom-chime
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+options:
+  token: ""
+  stations: []
+schema:
+  token: password
+  stations:
+    - name: match(^[a-z0-9][a-z0-9_-]{0,63}$)
+      host: str
+      port: "port?"
+      username: str
+      password: password

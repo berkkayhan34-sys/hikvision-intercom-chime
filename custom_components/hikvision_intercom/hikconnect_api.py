@@ -1,0 +1,731 @@
+"""Hik-Connect account client for the CPD7 local-stream path.
+
+Hik-Connect shares the EZVIZ CAS backend, so once we log in with a Hik-Connect
+account we can reuse the vendored `lib.cas.EzvizCAS` to fetch each device's CPD7
+control key (``@Key``) and drive the local `Cpd7LanClient`.  This module provides
+the Hik-Connect-specific pieces: the login endpoint, the device list (with LAN
+IP), and a token shaped the way `EzvizCAS` expects.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import ipaddress
+import json
+import logging
+import re
+import threading
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from time import monotonic
+from typing import Any, Callable
+from urllib.parse import quote
+
+import requests
+
+try:
+    from .lib.cas import EzvizCAS
+except ImportError:  # standalone / CLI use
+    from lib.cas import EzvizCAS
+
+_LOGGER = logging.getLogger(__name__)
+
+DEFAULT_BASE = "https://api.hik-connect.com"
+_HEADERS = {"clientType": "55", "lang": "en-US"}
+_CALL_STATUS = {1: "idle", 2: "ringing", 3: "call in progress"}
+_RELOGIN_MIN_INTERVAL = 30.0
+_RELOGIN_MAX_INTERVAL = 900.0
+_CALLER_MEMORY = 300.0
+
+
+def feature_code(account: str) -> str:
+    """Per-install terminal id, derived so it stays stable across restarts.
+
+    The cloud's rate limiter buckets on this value, so a shared literal lets any
+    one install's login storm lock out every other install of this integration.
+    """
+    return hashlib.md5(f"hikconnect_intercom:{account}".encode("utf-8")).hexdigest()[:16]
+
+
+def _csv_first_int(value: str | None) -> int | None:
+    """First field of a "14,-1,-1,..." CSV string as int (negatives -> None)."""
+    try:
+        v = int(str(value).split(",")[0])
+    except (ValueError, TypeError, AttributeError):
+        return None
+    return v if v >= 0 else None
+
+
+@dataclass
+class HikDevice:
+    serial: str
+    name: str
+    local_ip: str | None
+    device_type: str
+    locks: dict[int, int] = field(default_factory=dict)  # channel -> lock count
+    version: str = ""
+    support_isapi: bool = False
+
+
+@dataclass
+class HikCamera:
+    """A real (configured) channel on a device — one HA camera entity each."""
+
+    serial: str
+    channel: int
+    name: str
+    local_ip: str
+
+
+class HikConnectError(Exception):
+    """The cloud call failed."""
+
+
+class HikConnectAuthError(HikConnectError):
+    """Login failed, or the session expired and could not be renewed."""
+
+
+class HikConnectRateLimited(HikConnectError):
+    """The cloud is refusing calls for this account with a 429."""
+
+
+class HikConnectClient:
+    """Minimal Hik-Connect cloud client feeding the CPD7 local stream."""
+
+    def __init__(self, account: str, password: str, base_url: str = DEFAULT_BASE) -> None:
+        self._account = account
+        self._password = password
+        self._base = base_url.rstrip("/")
+        self._feature_code = feature_code(account)
+        self._session = requests.Session()
+        self._session.headers.update(_HEADERS)
+        self._session.headers["featureCode"] = self._feature_code
+        self._session_id: str | None = None
+        self._username: str | None = None
+        self._sysconf: list[str] = []
+        self._auth_lock = threading.Lock()
+        self._last_login = float("-inf")
+        self._login_backoff = 0.0
+        self._isapi_call_serials: set[str] = set()
+        self._last_rings: dict[str, dict] = {}
+        self._last_callers: dict[str, tuple[float, float, dict]] = {}
+        self._in_call: dict[str, bool] = {}
+        self._caller_channels: dict[str, dict[int, int]] = {}
+        self._login_listeners: list[Callable[[], None]] = []
+
+    # -- auth -------------------------------------------------------------
+    def login(self) -> None:
+        data = {
+            "account": self._account,
+            "password": hashlib.md5(self._password.encode("utf-8")).hexdigest(),
+        }
+        r = self._raw("POST", "/v3/users/login/v2", data)
+        if self._meta_code(r) == 1100:  # region redirect
+            self._base = "https://" + r["loginArea"]["apiDomain"]
+            r = self._raw("POST", "/v3/users/login/v2", data)
+        code = self._meta_code(r)
+        if code in (1013, 1014):
+            raise HikConnectAuthError("bad username/password")
+        if code == 1015:
+            raise HikConnectAuthError("CAPTCHA required; log in via the app once, then retry")
+        if "loginSession" not in r:
+            raise HikConnectAuthError(f"login failed (meta code {code})")
+        self._session_id = r["loginSession"]["sessionId"]
+        self._username = r["loginUser"]["username"]
+        self._session.headers["sessionId"] = self._session_id
+        sci = self._raw("GET", "/v3/configurations/system/info")["systemConfigInfo"]
+        self._sysconf = str(sci.get("sysConf", "")).split("|")
+        _LOGGER.debug("Hik-Connect login ok user=%s base=%s", self._username, self._base)
+        for listener in list(self._login_listeners):
+            listener()
+
+    def add_login_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
+        self._login_listeners.append(listener)
+        return lambda: self._login_listeners.remove(listener)
+
+    def _relogin(self, stale_session_id: str | None) -> None:
+        """Re-authenticate once, even if several threads notice the 401 together.
+
+        Held off between attempts: the cloud answers a login storm with a 429 that
+        outlives the storm itself.
+        """
+        with self._auth_lock:
+            if self._session_id != stale_session_id:
+                return  # another thread already refreshed it
+            held_off = max(_RELOGIN_MIN_INTERVAL, self._login_backoff) - (
+                monotonic() - self._last_login
+            )
+            if held_off > 0:
+                raise HikConnectError(
+                    f"session expired; re-login held off for another {held_off:.0f}s"
+                )
+            _LOGGER.warning("Hik-Connect session expired — re-authenticating")
+            self._last_login = monotonic()
+            try:
+                self.login()
+            except Exception:
+                self._login_backoff = min(
+                    max(self._login_backoff * 2, _RELOGIN_MIN_INTERVAL),
+                    _RELOGIN_MAX_INTERVAL,
+                )
+                raise
+            self._login_backoff = 0.0
+
+    # -- devices ----------------------------------------------------------
+    def get_devices(self) -> list[HikDevice]:
+        devices: list[HikDevice] = []
+        limit, offset, has_next = 50, 0, True
+        while has_next:
+            path = (
+                "/v3/userdevices/v1/devices/pagelist"
+                f"?groupId=-1&limit={limit}&offset={offset}"
+                "&filter=CONNECTION,STATUS,STATUS_EXT,WIFI,P2P"
+            )
+            j = self._get(path)
+            conns = j.get("connectionInfos") or {}
+            stats = j.get("statusInfos") or {}
+            for d in j.get("deviceInfos", []):
+                serial = d["deviceSerial"]
+                conn = conns.get(serial) or {}
+                ip = conn.get("localIp")
+                if ip in ("0.0.0.0", "", None):
+                    ip = None
+                devices.append(
+                    HikDevice(
+                        serial,
+                        d.get("name") or serial,
+                        ip,
+                        d.get("deviceType", ""),
+                        self._parse_locks(stats.get(serial) or {}),
+                        d.get("version", ""),
+                        self._parse_support_isapi(d.get("supportExt")),
+                    )
+                )
+                if devices[-1].support_isapi:
+                    self._isapi_call_serials.add(serial)
+            offset += limit
+            has_next = (j.get("page") or {}).get("hasNext", False)
+        return devices
+
+    def get_cameras(self, device: HikDevice) -> list[HikCamera]:
+        """Return the real (configured) channels for a device.
+
+        The cloud reports many phantom channels (name defaults to the serial,
+        signalStatus 0); a real door-station channel is either named or has
+        signal.  Falls back to channel 1 if the list can't be read.
+        """
+        cams: list[HikCamera] = []
+        try:
+            j = self._get(
+                f"/v3/userdevices/v1/cameras/info?deviceSerial={device.serial}"
+            )
+            for c in j.get("cameraInfos", []):
+                ch = c.get("channelNo")
+                if ch is None:
+                    continue
+                name = c.get("cameraName") or device.serial
+                sig = (c.get("deviceChannelInfo") or {}).get("signalStatus", 0)
+                if name != device.serial or sig == 1:
+                    cams.append(HikCamera(device.serial, int(ch), name, device.local_ip))
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("cameras/info failed for %s: %s", device.serial, err)
+        if not cams:
+            cams.append(HikCamera(device.serial, 1, device.name, device.local_ip))
+        cams.sort(key=lambda c: c.channel)
+        return cams
+
+    # -- CPD7 control key -------------------------------------------------
+    @property
+    def cas_token(self) -> dict[str, Any]:
+        if not self._session_id:
+            raise RuntimeError("call login() first")
+        return {
+            "session_id": self._session_id,
+            "rf_session_id": None,
+            "username": self._username,
+            "api_url": self._base.replace("https://", ""),
+            "feature_code": self._feature_code,
+            "service_urls": {"sysConf": self._sysconf},
+        }
+
+    def get_control_key(self, serial: str) -> tuple[str, str]:
+        """Return (aes_key, operation_code) for the device from the shared CAS.
+
+        CAS authenticates with the account session, so it fails once that expires;
+        renew and retry rather than leaving the cameras with no key.
+        """
+        for attempt in (1, 2):
+            try:
+                doc = EzvizCAS(self.cas_token).cas_get_encryption(serial)
+                session = doc["Response"]["Session"]
+                return session["@Key"], session["@OperationCode"]
+            except Exception as err:  # noqa: BLE001 - CAS raises many shapes
+                if attempt == 2:
+                    raise HikConnectError(f"CAS key fetch failed for {serial}: {err}") from err
+                _LOGGER.debug("CAS key fetch failed (%s) — re-authenticating", err)
+                try:
+                    self._relogin(self._session_id)
+                except HikConnectError as relogin_err:
+                    raise HikConnectError(
+                        f"CAS key fetch failed for {serial}: {err}"
+                    ) from relogin_err
+        raise AssertionError("unreachable")
+
+    # -- call / door controls (cloud) -------------------------------------
+    def unlock(self, serial: str, channel: int, lock_index: int = 0) -> dict:
+        """Open a door latch connected to an outdoor station channel."""
+        return self._put(
+            f"/v3/devconfig/v1/call/{serial}/{channel}/remote/unlock"
+            f"?srcId=1&lockId={lock_index}&userType=0"
+        )
+
+    def _call_operation(self, serial: str, cmd_id: int, what: str) -> dict:
+        """Send a call-operation cmdId, raising if the station rejects it.
+
+        The cloud returns meta.code 200 even when the station refuses the
+        command; the real result is the device's ``data.rc`` (1 == ok). Without
+        this the button silently no-ops on a rejection (e.g. rc 1952).
+        """
+        r = self._put(
+            f"/v3/devconfig/v1/call/{serial}/operation"
+            f"?cmdId={cmd_id}&handler={quote(self._username or '')}"
+        )
+        meta = (r.get("meta") or {}).get("code")
+        try:
+            rc = json.loads(r.get("data") or "{}").get("rc")
+        except (ValueError, TypeError):
+            rc = None
+        if meta != 200 or (rc is not None and rc != 1):
+            raise HikConnectError(f"{what} rejected (meta={meta}, rc={rc})")
+        return r
+
+    def _call_signal(self, serial: str, cmd_type: str) -> dict:
+        body = json.dumps(
+            {
+                "CallSignal": {
+                    "channelID": 0,
+                    "cmdType": cmd_type,
+                    "sessionId": self._username or "",
+                }
+            }
+        )
+        api_data = f"PUT /ISAPI/VideoIntercom/callSignal?format=json\r\n{body}"
+        r = self._call(
+            "POST",
+            "/v3/userdevices/v1/isapi",
+            lambda: {
+                "deviceSerial": serial,
+                "channelNo": 1,
+                "apiKey": "100113",
+                "apiData": api_data,
+            },
+        )
+        meta = (r.get("meta") or {}).get("code")
+        try:
+            status = json.loads(r.get("data") or "{}")
+        except (ValueError, TypeError):
+            status = {}
+        code = str(status.get("statusCode", ""))
+        if meta != 200 or code not in ("", "1"):
+            raise HikConnectError(
+                f"{cmd_type} rejected (meta={meta}, statusCode={code}, "
+                f"sub={status.get('subStatusCode')})"
+            )
+        return r
+
+    def _call_command(self, serial: str, cmd_type: str, cmd_id: int) -> dict:
+        if serial in self._isapi_call_serials:
+            return self._call_signal(serial, cmd_type)
+        return self._call_operation(serial, cmd_id, cmd_type)
+
+    def answer_call(self, serial: str) -> dict:
+        return self._call_command(serial, "answer", 2)
+
+    def end_call(self, serial: str, status: str | None = None) -> dict:
+        commands = [("hangUp", 5), ("reject", 3)]
+        if status == "ringing":
+            commands.reverse()
+        try:
+            return self._call_command(serial, *commands[0])
+        except HikConnectRateLimited:
+            raise
+        except HikConnectError as first:
+            try:
+                return self._call_command(serial, *commands[1])
+            except HikConnectError:
+                raise first from None
+
+    def get_call_status(self, serial: str) -> dict:
+        """Return {'status': idle|ringing|call in progress|unknown, 'info': {...}}."""
+        r = self._get(f"/v3/devconfig/v1/call/{serial}/status")
+        if (r.get("meta") or {}).get("code") != 200:
+            return {"status": "unknown", "info": {}}
+        data = json.loads(r["data"])
+        status = _CALL_STATUS.get(data.get("callStatus"), "unknown")
+        info = data.get("callerInfo") or {}
+        active = status in ("ringing", "call in progress")
+        if active:
+            previous = self._last_callers.get(serial)
+            now = datetime.now(timezone.utc).timestamp()
+            if info.get("devType", -1) == -1:
+                self._last_callers.pop(serial, None)
+            elif previous and self._in_call.get(serial) and previous[2].get("devNo") == info.get("devNo"):
+                self._last_callers[serial] = (previous[0], now, info)
+            else:
+                self._last_callers[serial] = (now, now, info)
+        if status != "unknown":
+            self._in_call[serial] = active
+        return {"status": status, "info": info}
+
+    def calling_door(self, serial: str) -> int | None:
+        current = self.get_call_status(serial)
+        if current["status"] in ("ringing", "call in progress"):
+            info = current["info"] if current["info"].get("devType", -1) != -1 else {}
+        elif current["status"] == "idle":
+            seen = self._last_callers.get(serial)
+            if seen is None or datetime.now(timezone.utc).timestamp() - seen[1] > _CALLER_MEMORY:
+                return None
+            ring = self.get_last_ring(serial)
+            if ring is None or ring["time"] / 1000 >= seen[0]:
+                return None
+            info = seen[2]
+        else:
+            return None
+        dev_no = info.get("devNo")
+        if not isinstance(dev_no, int):
+            return None
+        return self._caller_channels.get(serial, {}).get(dev_no, dev_no + 1)
+
+    def remember_caller_channel(self, serial: str, caller: dict) -> None:
+        dev_no, channel = caller.get("devNo"), caller.get("channelno")
+        if isinstance(dev_no, int) and isinstance(channel, int):
+            self._caller_channels.setdefault(serial, {})[dev_no] = channel
+
+    # -- ISAPI over the cloud passthrough ---------------------------------
+    def isapi(self, serial: str, method: str, path: str, body: str = "") -> dict:
+        """Relay an ISAPI request to the device through the Hik-Connect cloud."""
+
+        def form() -> dict:
+            return {
+                "subSerial": serial,
+                "cmdId": "19713",
+                "transmissionData": f"{method} {path}\r\n{body}",
+                "clientType": "55",
+                "sessionId": self._session_id or "",
+                "lang": "2",
+            }
+
+        return self._call("POST", "/api/device/isapi", form)
+
+    def get_video_key(self, serial: str) -> str:
+        """Fetch the existing stream verification code; never log or persist it."""
+        response = self.isapi(serial, "GET", "/ISAPI/System/Network/EZVIZ")
+        root = ET.fromstring(response.get("data") or "")
+        for element in root.iter():
+            if element.tag.rsplit("}", 1)[-1] == "verificationCode":
+                value = (element.text or "").strip()
+                if value and not set(value) <= {"*"}:
+                    return value
+        raise HikConnectError("Recorder video verification code is unavailable")
+
+    def get_audio_volumes(self, serial: str) -> dict[str, int | None]:
+        """Ringtone / two-way / microphone volume (0-10) via ISAPI."""
+
+        def grab(xml: str, tag: str) -> int | None:
+            m = re.search(rf"<{tag}>(\d+)</{tag}>", xml or "")
+            return int(m.group(1)) if m else None
+
+        ao = self.isapi(serial, "GET", "/ISAPI/System/Audio/AudioOut/channels/1")
+        ai = self.isapi(serial, "GET", "/ISAPI/System/Audio/AudioIn/channels/1")
+        return {
+            "two_way": grab(ao.get("data"), "talkVolume"),
+            "ringtone": grab(ao.get("data"), "volume"),
+            "microphone": grab(ai.get("data"), "volume"),
+        }
+
+    def set_audio_volume(self, serial: str, kind: str, value: int) -> None:
+        """Set one volume (kind: two_way|ringtone|microphone), 0-10."""
+        value = max(0, min(10, int(value)))
+        if kind == "microphone":
+            body = (
+                "<AudioIn><AudioInVolumelist><AudioInVlome><type>audioInput</type>"
+                f"<volume>{value}</volume></AudioInVlome></AudioInVolumelist>"
+                "<id>1</id></AudioIn>"
+            )
+            self.isapi(serial, "PUT", "/ISAPI/System/Audio/AudioIn/channels/1", body)
+            return
+        # AudioOut carries both talkVolume (two-way) and volume (ringtone);
+        # ISAPI PUT replaces the resource, so preserve the other field.
+        cur = self.get_audio_volumes(serial)
+        talk = value if kind == "two_way" else (cur.get("two_way") or 5)
+        vol = value if kind == "ringtone" else (cur.get("ringtone") or 5)
+        body = (
+            "<AudioOut><AudioOutVolumelist><AudioOutVlome>"
+            f"<talkVolume>{talk}</talkVolume><type>audioOutput</type>"
+            f"<volume>{vol}</volume>"
+            "</AudioOutVlome></AudioOutVolumelist><id>1</id></AudioOut>"
+        )
+        self.isapi(serial, "PUT", "/ISAPI/System/Audio/AudioOut/channels/1", body)
+
+    def get_work_status(self, serial: str) -> dict[str, str]:
+        r = self.isapi(serial, "GET", "/ISAPI/AccessControl/AcsWorkStatus?format=json")
+        try:
+            status = json.loads(r.get("data") or "{}").get("AcsWorkStatus")
+        except (ValueError, TypeError, AttributeError):
+            status = None
+        return status if isinstance(status, dict) else {}
+
+    def get_operation_time(self, serial: str) -> dict[str, int]:
+        r = self.isapi(serial, "GET", "/ISAPI/VideoIntercom/operationTime")
+        try:
+            root = ET.fromstring(r.get("data") or "")
+        except ET.ParseError:
+            return {}
+        out: dict[str, int] = {}
+        for el in root:
+            try:
+                out[el.tag.split("}")[-1]] = int(el.text)
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    def get_last_ring(self, serial: str) -> dict | None:
+        j = self._get(f"/v3/unifiedmsg/list?stype=27&serials={serial}&limit=1")
+        for msg in j.get("message") or []:
+            if msg.get("subType") == 2701 and msg.get("time"):
+                cached = self._last_rings.get(serial)
+                if cached and cached["msg_id"] == msg.get("msgId"):
+                    cached["calling_status"] = (msg.get("ext") or {}).get("callingStatus")
+                    return cached
+                skew = self._clock_skew_ms(serial)
+                if skew is None:
+                    return None
+                ring = {
+                    "time": msg["time"] - skew,
+                    "msg_id": msg.get("msgId"),
+                    "calling_status": (msg.get("ext") or {}).get("callingStatus"),
+                }
+                self._last_rings[serial] = ring
+                return ring
+        return None
+
+    def _clock_skew_ms(self, serial: str) -> int | None:
+        cur = self.isapi(serial, "GET", "/ISAPI/System/time").get("data") or ""
+        m = re.search(r"<localTime>(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)", cur)
+        if not m:
+            return None
+        wall = datetime.fromisoformat(m.group(1)).replace(tzinfo=timezone.utc)
+        return round((wall - datetime.now(timezone.utc)).total_seconds()) * 1000
+
+    def set_time_now(self, serial: str, wall_now: datetime) -> None:
+        """Set the device clock to `wall_now` (the caller's real local wall time).
+
+        `wall_now` must be the correct local time (DST-aware, e.g. HA's
+        ``dt_util.now()``); its wall-clock components are written verbatim and
+        stamped with the device's own offset so the device *displays* the right
+        time even if its configured timezone doesn't track DST.
+        """
+        cur = self.isapi(serial, "GET", "/ISAPI/System/time").get("data") or ""
+        tzm = re.search(r"<timeZone>([^<]*)</timeZone>", cur)
+        ltm = re.search(r"<localTime>([^<]+)</localTime>", cur)
+        tz = tzm.group(1) if tzm else "CST0:00:00"
+        lt = ltm.group(1) if ltm else ""
+        off = lt[-6:] if len(lt) >= 6 and lt[-6] in "+-" else "+00:00"
+        local = wall_now.strftime("%Y-%m-%dT%H:%M:%S") + off
+        body = (
+            '<Time version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">'
+            f"<timeMode>manual</timeMode><localTime>{local}</localTime>"
+            f"<timeZone>{tz}</timeZone></Time>"
+        )
+        self.isapi(serial, "PUT", "/ISAPI/System/time", body)
+
+    # -- Do Not Disturb + time config -------------------------------------
+    def get_dnd(self, serial: str) -> bool | None:
+        """True if DND is on (account won't receive calls from the device)."""
+        j = self._get(f"/v3/unifiedmsg/notify/nodisturb?devices={serial}&type=27")
+        for entry in j.get("deviceData") or []:
+            if serial in entry:
+                return entry[serial] is False  # inverted: false == disturbed/off
+        return None
+
+    def set_dnd(self, serial: str, on: bool) -> None:
+        self._post(
+            "/v3/unifiedmsg/notify/nodisturb",
+            {"devices": serial, "type": "27",
+             "enableNoDisturb": "true" if on else "false"},
+        )
+
+    def set_time_config(
+        self, serial: str, *, daylight_saving, time_zone, time_zone_no, time_format
+    ) -> None:
+        """Time zone / DST / date format (all via one endpoint)."""
+
+        def form() -> dict:
+            return {
+                "deviceSerialNo": serial,
+                "daylightSaving": str(daylight_saving),
+                "timeZone": time_zone or "UTC+00:00",
+                "timeZoneNo": str(time_zone_no or 0),
+                "timeFormat": str(time_format or 2),
+                "time": "",
+                "areaId": "105",
+                "clientType": "55",
+                "sessionId": self._session_id or "",
+            }
+
+        self._call("POST", "/api/device/configTimeZone", form)
+
+    # -- device status / metrics ------------------------------------------
+    def get_device_status_map(self) -> dict[str, dict]:
+        """Per-serial telemetry parsed from the cloud device list."""
+        out: dict[str, dict] = {}
+        limit, offset, has_next = 50, 0, True
+        while has_next:
+            path = (
+                "/v3/userdevices/v1/devices/pagelist"
+                f"?groupId=-1&limit={limit}&offset={offset}"
+                "&filter=CONNECTION,STATUS,STATUS_EXT,WIFI,P2P"
+            )
+            j = self._get(path)
+            conns = j.get("connectionInfos") or {}
+            stats = j.get("statusInfos") or {}
+            wifis = j.get("wifiInfos") or {}
+            for d in j.get("deviceInfos", []):
+                serial = d["deviceSerial"]
+                st = stats.get(serial) or {}
+                conn = conns.get(serial) or {}
+                wifi = wifis.get(serial) or {}
+                opt = st.get("optionals") or {}
+                gs = st.get("globalStatus")
+                disk_num = st.get("diskNum") or 0
+                out[serial] = {
+                    "online": (gs == 1) if gs is not None else (d.get("status") == 1),
+                    "version": d.get("version"),
+                    "model": d.get("deviceType"),
+                    "local_ip": self._clean_ip(conn.get("localIp")),
+                    "wan_ip": self._clean_ip(conn.get("netIp") or opt.get("wanIp")),
+                    "wifi_signal": wifi.get("signal")
+                    if isinstance(wifi.get("signal"), int)
+                    else None,
+                    "wireless": (wifi.get("netType") == "wireless")
+                    if wifi.get("netType")
+                    else None,
+                    "upgrade_available": bool(st.get("upgradeAvailable")),
+                    "disk_present": disk_num > 0,
+                    "disk_capacity_gb": _csv_first_int(opt.get("diskCapacity"))
+                    if disk_num
+                    else None,
+                    "disk_ok": (_csv_first_int(opt.get("diskHealth")) == 0)
+                    if disk_num
+                    else None,
+                    "offline_timestamp": d.get("offlineTimestamp"),
+                    "dst": opt.get("daylightSavingTime") == "1",
+                    "time_zone": opt.get("timeZone"),
+                    "time_zone_no": opt.get("tzCode"),
+                    "time_format": opt.get("timeFormat"),
+                }
+            offset += limit
+            has_next = (j.get("page") or {}).get("hasNext", False)
+        return out
+
+    @staticmethod
+    def _clean_ip(value: str | None) -> str | None:
+        try:
+            ip = ipaddress.IPv4Address(str(value).strip())
+        except ValueError:
+            return None
+        if ip.is_unspecified or ip.is_reserved or ip.is_multicast or ip.is_loopback:
+            return None
+        return str(ip)
+
+    @staticmethod
+    def _parse_support_isapi(support_ext: Any) -> bool:
+        if isinstance(support_ext, str):
+            try:
+                support_ext = json.loads(support_ext)
+            except ValueError:
+                return False
+        if not isinstance(support_ext, dict):
+            return False
+        return str(support_ext.get("145")) == "1"
+
+    @staticmethod
+    def _parse_locks(status_info: dict) -> dict[int, int]:
+        """channel -> lock count, from statusInfos[serial].optionals.lockNum."""
+        try:
+            raw = json.loads((status_info.get("optionals") or {})["lockNum"])
+        except (KeyError, TypeError, ValueError):
+            return {}
+        out: dict[int, int] = {}
+        for k, v in raw.items():
+            try:
+                out[int(k)] = int(v)
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    # -- http helpers -----------------------------------------------------
+    @staticmethod
+    def _unauthorized(status: int, payload: dict) -> bool:
+        """The cloud reports an expired session as a well-formed 401, not an error."""
+        return (
+            status == 401
+            or (payload.get("meta") or {}).get("code") == 401
+            or str(payload.get("resultCode")) == "-3"  # ISAPI passthrough
+        )
+
+    @staticmethod
+    def _meta_code(payload: dict) -> int:
+        meta = payload.get("meta")
+        if not isinstance(meta, dict) or "code" not in meta:
+            raise HikConnectError(f"login: unexpected reply {json.dumps(payload)[:200]}")
+        return meta["code"]
+
+    @staticmethod
+    def _json(r: requests.Response, method: str, path: str) -> dict:
+        """Parse a reply, turning a cloud rate-limit into a typed error."""
+        try:
+            payload = r.json()
+        except ValueError as err:
+            raise HikConnectError(f"{method} {path}: non-JSON reply ({r.status_code})") from err
+        if r.status_code == 429 or payload.get("code") == 429:
+            raise HikConnectRateLimited(
+                f"{method} {path}: rate-limited by the cloud "
+                f"({payload.get('message') or r.status_code})"
+            )
+        return payload
+
+    def _raw(self, method: str, path: str, data: dict | None = None) -> dict:
+        r = self._session.request(method, f"{self._base}{path}", data=data, timeout=25)
+        return self._json(r, method, path)
+
+    def _call(self, method: str, path: str, data_factory=None) -> dict:
+        """Request, transparently re-authenticating once if the session has expired.
+
+        Sessions expire ~24h after login, so any long-lived request path has to be
+        able to renew itself; without this every caller silently degrades to no data.
+        `data_factory` is re-invoked on retry so bodies carrying the sessionId
+        (the ISAPI passthrough) are rebuilt with the fresh one.
+        """
+        for attempt in (1, 2):
+            data = data_factory() if data_factory else None
+            r = self._session.request(method, f"{self._base}{path}", data=data, timeout=25)
+            payload = self._json(r, method, path)
+            if not self._unauthorized(r.status_code, payload):
+                return payload
+            if attempt == 2:
+                raise HikConnectAuthError(
+                    f"{method} {path}: still unauthorized after re-login"
+                )
+            self._relogin(self._session_id)
+        raise AssertionError("unreachable")
+
+    def _post(self, path: str, data: dict) -> dict:
+        return self._call("POST", path, lambda: data)
+
+    def _get(self, path: str) -> dict:
+        return self._call("GET", path)
+
+    def _put(self, path: str) -> dict:
+        return self._call("PUT", path)

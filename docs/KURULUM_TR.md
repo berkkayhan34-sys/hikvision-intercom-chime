@@ -1,42 +1,41 @@
-# HACS özel depo kurulumu
+# Kurulum rehberi (Türkçe)
 
-Bu entegrasyon HACS genel listesinde değildir; özel depo olarak eklenir.
-Gerçek HA kurulumu, beş kontrol ve sessiz dosya yükleme doğrulanmıştır.
-Bu yeni bileşenin fiziksel ses testi henüz yapılmamıştır.
+Tek entegrasyon + tek küçük uygulama. Kapı açma, arama, ses seviyeleri ve kamera
+Hik-Connect hesabınızla çalışır; iç ünitede özel zil sesi için ek olarak
+**Hikvision SDK Bridge** uygulaması gerekir.
 
-## Gerekenler
+## Gereksinimler
 
-- Home Assistant OS/Supervisor, Core 2026.10 veya üzeri.
-- Çalışan MQTT entegrasyonu ve broker.
-- Hikvision Doorbell uygulaması, kararlı sürüm 3.0.34 veya üzeri:
-  https://github.com/pergolafabio/Hikvision-Addons
-- İç ekranın yerel IP adresi, SDK portu (genellikle 8000), cihaz admin
-  kullanıcı adı ve parolası. Hik-Connect hesap parolası farklıdır.
+- Home Assistant 2026.10.0 veya üstü (zil sesi için Home Assistant OS ya da Supervised).
+- İstasyonu taşıyan Hik-Connect hesabı.
+- Zil sesi için: iç ünitenin yerel IP adresi (özel ağ), SDK portu (genelde 8000) ve **cihaz
+  yönetici** parolası (Hik-Connect parolası değildir).
 
-Windows, SADP veya iVMS çalışma sırasında gerekmez. Yalnız MQTT yeterli değildir;
-ses aktarımını Home Assistant üzerindeki Hikvision Doorbell uygulaması yapar.
+## Adımlar
 
-## Kurulum ve kullanım
+1. HACS -> Özel depolar -> `https://github.com/berkkayhan34-sys/hikvision-intercom-chime`
+   (Entegrasyon) -> **Hikvision Intercom** indir -> Home Assistant'ı yeniden başlat.
+2. Ayarlar -> Cihazlar ve hizmetler -> Entegrasyon ekle -> **Hikvision Intercom** ->
+   Hik-Connect hesabınızla giriş yapın.
+3. Zil sesi için: Ayarlar -> Uygulamalar -> Uygulama mağazası -> sağ üst menü -> Depolar ->
+   aynı adresi ekleyin -> **Hikvision SDK Bridge** kurun (ilk derleme cihazınızda yapılır,
+   yaklaşık 26 MB indirir) -> başlatın.
+4. Entegrasyon sayfasında **Yerel istasyon ekle**: adres, SDK portu, yönetici kullanıcı adı
+   ve parola. Uygulamanın yeniden başlatılmasını onaylayın. Parola yalnızca uygulamanın kendi
+   ayarlarında saklanır, entegrasyon kaydında asla.
 
-1. Önce Home Assistant yedeği al. İlk değerlendirmeyi ayrı test ortamında yap.
-2. HACS → üç nokta → Özel depolar: aşağıdaki adresi **Entegrasyon** türüyle ekle:
-   `https://github.com/berkkayhan34-sys/hikvision-intercom-chime`.
-   Hikvision Intercom Chime deposunu bulup indir. Alternatif olarak ZIP içindeki
-   `custom_components/hikvision_intercom_chime` klasörünü HA'ya kopyalayabilirsin.
-3. Home Assistant'ı yeniden başlat. Ayarlar → Cihazlar ve hizmetler →
-   Entegrasyon ekle → Hikvision Intercom Chime.
-4. Bağlantı bilgilerini yalnız kurulum ekranına gir. Eksik MQTT/köprü için
-   açıklama gösterilir. Köprü yeniden başlatılacaksa ayrıca onay istenir;
-   aynı uygulamadaki diğer paneller kısa süre bağlantı kaybedebilir.
-5. Entegrasyonun Yapılandır ekranından WAV yükle, gain ve tekrar sayısını seç.
-   Dosya: **8000 Hz / mono / PCM16 WAV**, en fazla 1 MiB / 30 saniye.
-   Tekrarlarla toplam en fazla 60 saniye; tekrar sayısı 1–10.
-6. Gain ve tekrar cihaz sayfasındaki sayı kontrollerinden de değiştirilebilir.
-   Gain dijitaldir; artışı sesi bozabilir, fiziksel hoparlör sınırını yükseltmez.
-7. Yalnız **Zili çal** düğmesi ses isteği gönderir. Kurulum, kaydetme ve
-   yeniden yükleme sessizdir. Varsayılan ses önceden kabul edilen ding-dong,
-   dört tekrar ve 0 dB ek gain'dir.
+## Kullanım
 
-Parola entegrasyon kaydına değil, mevcut köprünün Supervisor ayarlarına yazılır.
-Yedeklerini koru. Entegrasyonu kaldırmak köprüyü/MQTT'yi veya onların parolalarını
-silmez. “Ses istendi” durumu, sesin fiziksel olarak duyulduğunu kanıtlamaz.
+- **Zil sesini çal / Durdur**: yalnızca bastığınızda çalar. Kurulumda, yeniden yüklemede,
+  ayar değişikliğinde asla çalmaz. İç ünite çalıyor veya görüşmedeyse engellenir.
+- **Dijital kazanç** (-30..+30 dB) ve **Tekrar sayısı** (1..10, toplam en fazla 60 sn).
+- Kendi sesiniz: istasyon kaydında **Yeniden yapılandır** -> WAV yükleyin (8000 Hz, mono,
+  16 bit PCM, en çok 1 MiB / 30 sn).
+
+## Eski kurulumdan geçiş
+
+Home Assistant yedeği alın -> eski üç entegrasyonu ve *Hikvision Doorbell* uygulamasını
+kaldırın -> yeniden başlatın -> yeni entegrasyonu ve uygulamayı kurun -> istasyonu ekleyin.
+İstasyonu *Living Room Doorbell Chime* adıyla eklerseniz varlık kimlikleri aynı kalır.
+Eski uygulamadaki ISAPI kutusu, yeniden başlatma, sessize alma ve MQTT çağrı sensörleri
+taşınmaz.

@@ -1,0 +1,31 @@
+{
+  "domain": "hikvision_intercom",
+  "name": "Hikvision Intercom",
+  "after_dependencies": [
+    "go2rtc",
+    "hassio",
+    "stream"
+  ],
+  "codeowners": [
+    "@berkkayhan34-sys"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "ffmpeg",
+    "file_upload",
+    "http"
+  ],
+  "documentation": "https://github.com/berkkayhan34-sys/hikvision-intercom-chime",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/berkkayhan34-sys/hikvision-intercom-chime/issues",
+  "loggers": [
+    "custom_components.hikvision_intercom"
+  ],
+  "requirements": [
+    "pycryptodome",
+    "xmltodict",
+    "paho-mqtt>=2.0"
+  ],
+  "version": "0.2.0"
+}

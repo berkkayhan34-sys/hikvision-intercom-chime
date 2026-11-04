@@ -1,0 +1,7 @@
+configuration:
+  token:
+    name: API token
+    description: Shared secret used by the Home Assistant integration. It is generated and written by the integration; do not edit it by hand.
+  stations:
+    name: Stations
+    description: Indoor stations. The Hikvision Intercom integration manages this list when you add a station there.

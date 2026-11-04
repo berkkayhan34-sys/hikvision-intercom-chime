@@ -1,0 +1,287 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Hikvision Intercom",
+        "description": "Log in with your Hik-Connect account. Live video streams directly from the station over your LAN; discovery and the controls (unlock, calls, volumes) go through the Hik-Connect cloud. Add a local station afterwards to enable the doorbell chime.",
+        "data": {
+          "account": "Account (email or username)",
+          "password": "Password",
+          "server": "Server",
+          "base_url": "Custom API URL (only when Server is Custom)"
+        },
+        "data_description": {
+          "server": "Pick your region, or Custom to enter an API URL. Global auto-routes to the right region.",
+          "base_url": "e.g. apiieu.hik-connect.com — used only when Server is set to Custom."
+        }
+      },
+      "reconfigure": {
+        "title": "Hikvision Intercom",
+        "description": "Change the server or account for this integration. Leave the password blank to keep the current one.",
+        "data": {
+          "account": "Account (email or username)",
+          "password": "Password (blank = keep current)",
+          "server": "Server",
+          "base_url": "Custom API URL (only when Server is Custom)"
+        },
+        "data_description": {
+          "server": "Pick your region, or Custom to enter an API URL. Global auto-routes to the right region.",
+          "base_url": "e.g. apiieu.hik-connect.com — used only when Server is set to Custom."
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid account or password (a CAPTCHA may be required — open the Hik-Connect app once, then retry).",
+      "cannot_connect": "Could not reach Hik-Connect.",
+      "custom_url_required": "Select a server, or choose Custom and enter an API URL."
+    },
+    "abort": {
+      "already_configured": "This account is already configured.",
+      "account_mismatch": "The account must match the one this integration was set up with. To use a different account, add a new integration.",
+      "reconfigure_successful": "Server updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hik-Connect Intercom options",
+        "data": {
+          "call_poll_interval": "Call status poll interval",
+          "native_stream": "Live video stream"
+        },
+        "data_description": {
+          "call_poll_interval": "Seconds between cloud call-status polls. Realtime push already reports rings immediately; a shorter interval only helps when push is unavailable, at the cost of more cloud requests.",
+          "native_stream": "Native streams pass the station's own video to Home Assistant (WebRTC/HLS, HomeKit Bridge with `video_codec: copy`) instead of transcoding to MJPEG: lower CPU use and faster start. Most browsers and HomeKit can't play H.265, so H.265 channels use MJPEG unless you include them."
+        }
+      }
+    }
+  },
+  "selector": {
+    "native_stream": {
+      "options": {
+        "off": "MJPEG only",
+        "h264": "Native H.264, H.265 as MJPEG",
+        "all": "Native H.264 and H.265"
+      }
+    }
+  },
+  "title": "Hikvision Intercom",
+  "config_subentries": {
+    "station": {
+      "entry_type": "Local station",
+      "initiate_flow": {
+        "user": "Add local station"
+      },
+      "step": {
+        "user": {
+          "title": "Prerequisites",
+          "description": "The Hikvision SDK Bridge app must be installed. Fix a missing prerequisite, then Submit to check again. This step never plays sound."
+        },
+        "connection": {
+          "title": "Indoor station connection",
+          "description": "Use the station's admin password, not your Hik-Connect password. Only the SDK Bridge app stores it; this integration does not.",
+          "data": {
+            "title": "Name",
+            "host": "Station IP address",
+            "port": "SDK port",
+            "username": "Admin username",
+            "password": "Station admin password"
+          }
+        },
+        "confirm": {
+          "title": "Confirm app configuration",
+          "description": "The Hikvision SDK Bridge app's station list will be updated and the app started or restarted if needed; other stations in the app may briefly disconnect. No unlock, alarm, firmware or playback action is performed.",
+          "data": {
+            "confirm_restart": "I confirm the app configuration and a restart if needed"
+          }
+        },
+        "reconfigure": {
+          "title": "Chime sound",
+          "description": "The file is optional. WAV: 8000 Hz, mono, 16-bit PCM, at most 1 MiB and 30 seconds. Repetitions combined may not exceed 60 seconds. Positive gain may distort and cannot raise the station's hardware volume. Saving never plays sound.",
+          "data": {
+            "audio_file": "WAV audio file",
+            "gain_db": "Digital gain (dB)",
+            "repeats": "Repetitions"
+          }
+        }
+      },
+      "error": {
+        "invalid_host": "Enter the station's private IPv4 address, not a URL or public address.",
+        "invalid_port": "The SDK port must be a whole number from 1 to 65535.",
+        "invalid_credentials": "Enter the station's admin username and password, at most 64 UTF-8 bytes each, without control characters.",
+        "invalid_gain": "Gain must be a finite number between -30 and +30 dB.",
+        "invalid_repeats": "Repetitions must be a whole number between 1 and 10.",
+        "invalid_file_size": "WAV file must be non-empty and no larger than 1 MiB.",
+        "invalid_wav": "The uploaded file is not a valid supported WAV.",
+        "unsupported_wav": "Use uncompressed 8000 Hz, mono, signed 16-bit PCM WAV. Convert other formats before upload.",
+        "invalid_duration": "Source audio must be longer than zero and at most 30 seconds.",
+        "truncated_wav": "The WAV is incomplete. Upload the original complete file.",
+        "total_duration_exceeded": "Audio duration multiplied by repetitions must not exceed 60 seconds.",
+        "busy": "A chime operation is already active. Nothing was queued.",
+        "unsafe_storage": "Audio storage contains an unsafe link or inconsistent file. Check the local storage.",
+        "invalid_storage_id": "Invalid integration-owned audio identifier.",
+        "source_limit": "The per-device limit of 16 distinct audio uploads has been reached. Existing audio is preserved.",
+        "integration_not_ready": "The integration is not loaded. Fix its setup error before changing audio.",
+        "confirmation_required": "Confirm the app configuration and restart to continue.",
+        "supervisor_required": "Home Assistant OS or Supervised is required for the chime. No Windows app is needed.",
+        "app_required": "Install the Hikvision SDK Bridge app (add https://github.com/berkkayhan34-sys/hikvision-intercom-chime as an app repository) and retry.",
+        "app_ambiguous": "More than one Hikvision SDK Bridge app is installed. Keep one and retry.",
+        "app_stopped": "The Hikvision SDK Bridge app is stopped. Start it explicitly.",
+        "app_unconfigured": "The Hikvision SDK Bridge app has no API token yet. Add a station to configure it.",
+        "app_unreachable": "The Hikvision SDK Bridge app is not reachable. Check that it is running.",
+        "app_unauthorized": "The Hikvision SDK Bridge app rejected the integration's token. Reconfigure the station.",
+        "app_error": "The Hikvision SDK Bridge app returned an unexpected error. Check its log.",
+        "app_config_failed": "App configuration or start failed. The previous options were restored. Check the app and retry.",
+        "app_rollback_failed": "App setup AND restoration failed. Restore the app configuration from your native Home Assistant backup.",
+        "station_offline": "The indoor station is not connected to the SDK bridge. Check its address and password.",
+        "station_unknown": "The SDK bridge does not know this station. Reconfigure or re-add it.",
+        "duplicate_station": "Another station in the bridge already uses this address.",
+        "invalid_audio": "The audio was rejected by the SDK bridge. Re-save the sound settings.",
+        "playback_request_failed": "The chime request failed. No sound was confirmed.",
+        "stop_request_failed": "The stop request could not be delivered. Check the station.",
+        "storage_unavailable": "Audio storage is unavailable. Check the Home Assistant storage folder.",
+        "call_active": "The station is ringing or in a call. The chime was blocked to avoid interrupting it."
+      },
+      "abort": {
+        "already_configured": "This station is already configured.",
+        "setup_expired": "The setup session expired. Start again.",
+        "reconfigure_successful": "Chime sound saved."
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "play": {
+        "name": "Play chime"
+      },
+      "stop": {
+        "name": "Stop chime"
+      }
+    },
+    "number": {
+      "gain_db": {
+        "name": "Digital gain"
+      },
+      "repeats": {
+        "name": "Repetitions"
+      }
+    },
+    "sensor": {
+      "status": {
+        "name": "Request status",
+        "state": {
+          "idle": "Idle",
+          "sending": "Sound requested",
+          "error": "Error"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_host": {
+      "message": "Enter the station's private IPv4 address, not a URL or public address."
+    },
+    "invalid_port": {
+      "message": "The SDK port must be a whole number from 1 to 65535."
+    },
+    "invalid_credentials": {
+      "message": "Enter the station's admin username and password, at most 64 UTF-8 bytes each, without control characters."
+    },
+    "invalid_gain": {
+      "message": "Gain must be a finite number between -30 and +30 dB."
+    },
+    "invalid_repeats": {
+      "message": "Repetitions must be a whole number between 1 and 10."
+    },
+    "invalid_file_size": {
+      "message": "WAV file must be non-empty and no larger than 1 MiB."
+    },
+    "invalid_wav": {
+      "message": "The uploaded file is not a valid supported WAV."
+    },
+    "unsupported_wav": {
+      "message": "Use uncompressed 8000 Hz, mono, signed 16-bit PCM WAV. Convert other formats before upload."
+    },
+    "invalid_duration": {
+      "message": "Source audio must be longer than zero and at most 30 seconds."
+    },
+    "truncated_wav": {
+      "message": "The WAV is incomplete. Upload the original complete file."
+    },
+    "total_duration_exceeded": {
+      "message": "Audio duration multiplied by repetitions must not exceed 60 seconds."
+    },
+    "busy": {
+      "message": "A chime operation is already active. Nothing was queued."
+    },
+    "unsafe_storage": {
+      "message": "Audio storage contains an unsafe link or inconsistent file. Check the local storage."
+    },
+    "invalid_storage_id": {
+      "message": "Invalid integration-owned audio identifier."
+    },
+    "source_limit": {
+      "message": "The per-device limit of 16 distinct audio uploads has been reached. Existing audio is preserved."
+    },
+    "integration_not_ready": {
+      "message": "The integration is not loaded. Fix its setup error before changing audio."
+    },
+    "confirmation_required": {
+      "message": "Confirm the app configuration and restart to continue."
+    },
+    "supervisor_required": {
+      "message": "Home Assistant OS or Supervised is required for the chime. No Windows app is needed."
+    },
+    "app_required": {
+      "message": "Install the Hikvision SDK Bridge app (add https://github.com/berkkayhan34-sys/hikvision-intercom-chime as an app repository) and retry."
+    },
+    "app_ambiguous": {
+      "message": "More than one Hikvision SDK Bridge app is installed. Keep one and retry."
+    },
+    "app_stopped": {
+      "message": "The Hikvision SDK Bridge app is stopped. Start it explicitly."
+    },
+    "app_unconfigured": {
+      "message": "The Hikvision SDK Bridge app has no API token yet. Add a station to configure it."
+    },
+    "app_unreachable": {
+      "message": "The Hikvision SDK Bridge app is not reachable. Check that it is running."
+    },
+    "app_unauthorized": {
+      "message": "The Hikvision SDK Bridge app rejected the integration's token. Reconfigure the station."
+    },
+    "app_error": {
+      "message": "The Hikvision SDK Bridge app returned an unexpected error. Check its log."
+    },
+    "app_config_failed": {
+      "message": "App configuration or start failed. The previous options were restored. Check the app and retry."
+    },
+    "app_rollback_failed": {
+      "message": "App setup AND restoration failed. Restore the app configuration from your native Home Assistant backup."
+    },
+    "station_offline": {
+      "message": "The indoor station is not connected to the SDK bridge. Check its address and password."
+    },
+    "station_unknown": {
+      "message": "The SDK bridge does not know this station. Reconfigure or re-add it."
+    },
+    "duplicate_station": {
+      "message": "Another station in the bridge already uses this address."
+    },
+    "invalid_audio": {
+      "message": "The audio was rejected by the SDK bridge. Re-save the sound settings."
+    },
+    "playback_request_failed": {
+      "message": "The chime request failed. No sound was confirmed."
+    },
+    "stop_request_failed": {
+      "message": "The stop request could not be delivered. Check the station."
+    },
+    "storage_unavailable": {
+      "message": "Audio storage is unavailable. Check the Home Assistant storage folder."
+    },
+    "call_active": {
+      "message": "The station is ringing or in a call. The chime was blocked to avoid interrupting it."
+    }
+  }
+}
