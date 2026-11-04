@@ -156,7 +156,7 @@
         "integration_not_ready": "The integration is not loaded. Fix its setup error before changing audio.",
         "confirmation_required": "Confirm the app configuration and restart to continue.",
         "supervisor_required": "Home Assistant OS or Supervised is required for the chime. No Windows app is needed.",
-        "app_required": "Install the Hikvision SDK Bridge app (add https://github.com/berkkayhan34-sys/hikvision-intercom-chime as an app repository) and retry.",
+        "app_required": "Install the Hikvision SDK Bridge app from its app repository (see the repository's README) and retry.",
         "app_ambiguous": "More than one Hikvision SDK Bridge app is installed. Keep one and retry.",
         "app_stopped": "The Hikvision SDK Bridge app is stopped. Start it explicitly.",
         "app_unconfigured": "The Hikvision SDK Bridge app has no API token yet. Add a station to configure it.",
@@ -265,7 +265,7 @@
       "message": "Home Assistant OS or Supervised is required for the chime. No Windows app is needed."
     },
     "app_required": {
-      "message": "Install the Hikvision SDK Bridge app (add https://github.com/berkkayhan34-sys/hikvision-intercom-chime as an app repository) and retry."
+      "message": "Install the Hikvision SDK Bridge app from its app repository (see the repository's README) and retry."
     },
     "app_ambiguous": {
       "message": "More than one Hikvision SDK Bridge app is installed. Keep one and retry."

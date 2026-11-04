@@ -156,7 +156,7 @@
         "integration_not_ready": "Entegrasyon yüklenmemiş. Ses ayarından önce kurulum hatasını düzelt.",
         "confirmation_required": "Devam etmek için uygulama yapılandırmasını ve yeniden başlatmayı onaylayın.",
         "supervisor_required": "Zil sesi için Home Assistant OS veya Supervised gerekir. Windows uygulaması gerekmez.",
-        "app_required": "Hikvision SDK Bridge uygulamasını kurun (https://github.com/berkkayhan34-sys/hikvision-intercom-chime adresini uygulama deposu olarak ekleyin) ve tekrar deneyin.",
+        "app_required": "Hikvision SDK Bridge uygulamasını uygulama deposundan kurun (deponun README dosyasına bakın) ve tekrar deneyin.",
         "app_ambiguous": "Birden fazla Hikvision SDK Bridge uygulaması kurulu. Birini bırakıp tekrar deneyin.",
         "app_stopped": "Hikvision SDK Bridge uygulaması durmuş. Elle başlatın.",
         "app_unconfigured": "Hikvision SDK Bridge uygulamasında henüz API anahtarı yok. Yapılandırmak için bir istasyon ekleyin.",
@@ -265,7 +265,7 @@
       "message": "Zil sesi için Home Assistant OS veya Supervised gerekir. Windows uygulaması gerekmez."
     },
     "app_required": {
-      "message": "Hikvision SDK Bridge uygulamasını kurun (https://github.com/berkkayhan34-sys/hikvision-intercom-chime adresini uygulama deposu olarak ekleyin) ve tekrar deneyin."
+      "message": "Hikvision SDK Bridge uygulamasını uygulama deposundan kurun (deponun README dosyasına bakın) ve tekrar deneyin."
     },
     "app_ambiguous": {
       "message": "Birden fazla Hikvision SDK Bridge uygulaması kurulu. Birini bırakıp tekrar deneyin."
