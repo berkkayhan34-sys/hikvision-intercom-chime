@@ -8,12 +8,29 @@ from hashlib import sha256
 from pathlib import Path
 import platform
 import sys
+import time
 import urllib.request
 
 _MACHINES = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "aarch64", "arm64": "aarch64"}
 
 COMMIT = "ce033c5da60ed28740c4e69d6996818cf8d4fdad"
 BASE = f"https://raw.githubusercontent.com/pergolafabio/Hikvision-Addons/{COMMIT}/hikvision-doorbell"
+
+
+def _download(url: str, name: str, attempts: int = 4, pause=time.sleep) -> bytes:
+    """GET with a few retries: a build on a slow or flaky connection should not fail on one timed-out read.
+
+    Only the transfer is retried; the checksum of what arrives is still verified by the caller.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                return response.read()
+        except OSError as error:  # URLError, TimeoutError and socket errors are all OSError
+            if attempt == attempts:
+                raise SystemExit(f"download of {name} failed after {attempts} attempts: {type(error).__name__}") from None
+            pause(2 * attempt)
+    raise AssertionError("unreachable")
 
 
 def main(architecture: str, destination: Path) -> None:
@@ -33,8 +50,7 @@ def main(architecture: str, destination: Path) -> None:
         target = destination / relative
         if destination.resolve() not in target.resolve().parents:
             raise SystemExit("manifest path escapes the destination")
-        with urllib.request.urlopen(f"{BASE}/lib-{architecture}/{relative}", timeout=60) as response:
-            data = response.read()
+        data = _download(f"{BASE}/lib-{architecture}/{relative}", relative)
         if sha256(data).hexdigest() != digest:
             raise SystemExit(f"checksum mismatch for {relative}")
         target.parent.mkdir(parents=True, exist_ok=True)
