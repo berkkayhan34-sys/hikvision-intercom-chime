@@ -47,15 +47,15 @@ from .lib.mpegts import TsMuxer
 
 _LOGGER = logging.getLogger(__name__)
 
-_SC = b"\x00\x00\x00\x01"     # H.264 Annex-B start code
-_EOI = b"\xff\xd9"            # JPEG end-of-image
+_SC = b"\x00\x00\x00\x01"  # H.264 Annex-B start code
+_EOI = b"\xff\xd9"  # JPEG end-of-image
 _MJPEG_BOUNDARY = "frame"
 _MAX_EMPTY_READS = 3
-_MAX_STREAMS_PER_DEVICE = 2   # concurrent *upstreams* (channels), not viewers
+_MAX_STREAMS_PER_DEVICE = 2  # concurrent *upstreams* (channels), not viewers
 _ACQUIRE_TIMEOUT = 6.0
 _LIVE_ACQUIRE_TIMEOUT = 25.0  # allow in-flight previews to finish before live video
-_LINGER_SEC = 1.0             # return scarce slots before snapshot acquire times out
-_FEED_QUEUE_MAX = 240         # bounded backlog into ffmpeg; drops whole GOPs
+_LINGER_SEC = 1.0  # return scarce slots before snapshot acquire times out
+_FEED_QUEUE_MAX = 240  # bounded backlog into ffmpeg; drops whole GOPs
 _FIRST_FRAME_TIMEOUT = 12.0
 _FRAME_TIMEOUT = 10.0
 _NATIVE_STREAMS = f"{DOMAIN}_native_streams"
@@ -119,8 +119,15 @@ class _ChannelStream:
     """
 
     def __init__(
-        self, hass: HomeAssistant, client, cam: HikCamera, sem: asyncio.Semaphore,
-        quality: dict[str, str], qkey: str, status, on_codec=None,
+        self,
+        hass: HomeAssistant,
+        client,
+        cam: HikCamera,
+        sem: asyncio.Semaphore,
+        quality: dict[str, str],
+        qkey: str,
+        status,
+        on_codec=None,
     ) -> None:
         self._hass = hass
         self._on_codec = on_codec
@@ -240,7 +247,7 @@ class _ChannelStream:
         self._waiters.add(ev)
         try:
             await asyncio.wait_for(ev.wait(), timeout)
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             return None
         finally:
             self._waiters.discard(ev)
@@ -256,11 +263,14 @@ class _ChannelStream:
     async def _open(self, timeout: float = _ACQUIRE_TIMEOUT) -> bool:
         try:
             await asyncio.wait_for(self._sem.acquire(), timeout=timeout)
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             _LOGGER.warning(
                 "%s ch%d (%s): no free stream slot after %.0fs — %d upstream(s) in use",
-                self._cam.serial, self._cam.channel, self._cam.name,
-                timeout, _MAX_STREAMS_PER_DEVICE,
+                self._cam.serial,
+                self._cam.channel,
+                self._cam.name,
+                timeout,
+                _MAX_STREAMS_PER_DEVICE,
             )
             return False
         try:
@@ -318,17 +328,35 @@ class _ChannelStream:
     async def _start_encoder(self) -> bool:
         try:
             proc = await asyncio.create_subprocess_exec(
-                get_ffmpeg_manager(self._hass).binary, "-loglevel", "error",
-                "-fflags", "+discardcorrupt", "-f", self.codec, "-i", "pipe:0",
-                "-an", "-c:v", "mjpeg", "-q:v", str(MJPEG_QUALITY), "-r", str(MJPEG_FPS),
-                "-vf", f"scale={MJPEG_WIDTH}:{MJPEG_HEIGHT}",
-                "-f", "image2pipe", "pipe:1",
+                get_ffmpeg_manager(self._hass).binary,
+                "-loglevel",
+                "error",
+                "-fflags",
+                "+discardcorrupt",
+                "-f",
+                self.codec,
+                "-i",
+                "pipe:0",
+                "-an",
+                "-c:v",
+                "mjpeg",
+                "-q:v",
+                str(MJPEG_QUALITY),
+                "-r",
+                str(MJPEG_FPS),
+                "-vf",
+                f"scale={MJPEG_WIDTH}:{MJPEG_HEIGHT}",
+                "-f",
+                "image2pipe",
+                "pipe:1",
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("JPEG encoder failed to start for %s: %s", self._cam.name, err)
+        except Exception as err:
+            _LOGGER.warning(
+                "JPEG encoder failed to start for %s: %s", self._cam.name, err
+            )
             return False
         self._proc = proc
         self._jpeg = None
@@ -369,7 +397,11 @@ class _ChannelStream:
             if self._ip is not None:
                 _LOGGER.info(
                     "%s ch%d (%s): station moved %s -> %s",
-                    self._cam.serial, self._cam.channel, self._cam.name, self._ip, ip,
+                    self._cam.serial,
+                    self._cam.channel,
+                    self._cam.name,
+                    self._ip,
+                    ip,
                 )
             self._ip = ip
         return ip
@@ -419,17 +451,25 @@ class _ChannelStream:
                 if refresh:
                     _LOGGER.warning(
                         "live feed still refused for %s ch%d (%s) after key refresh: %s",
-                        self._cam.serial, self._cam.channel, self._cam.name, err,
+                        self._cam.serial,
+                        self._cam.channel,
+                        self._cam.name,
+                        err,
                     )
                     return None
                 _LOGGER.debug(
                     "control key stale for %s ch%d — refetching and retrying",
-                    self._cam.serial, self._cam.channel,
+                    self._cam.serial,
+                    self._cam.channel,
                 )
-            except Exception as err:  # noqa: BLE001 - offline sub-stations error here
+            except Exception as err:
                 _LOGGER.warning(
                     "no live feed for %s ch%d (%s) at %s: %s",
-                    self._cam.serial, self._cam.channel, self._cam.name, host, err,
+                    self._cam.serial,
+                    self._cam.channel,
+                    self._cam.name,
+                    host,
+                    err,
                 )
                 return None
         return None
@@ -452,7 +492,7 @@ class _ChannelStream:
                     self._ingest(ts, unit)
         except asyncio.CancelledError:
             raise
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug(
                 "CPD7 pump %s ch%d ended: %s", self._cam.serial, self._cam.channel, err
             )
@@ -648,7 +688,11 @@ class HikLocalCamera(Camera):
         return bool(self._native) and (codec is None or codec in self._native)
 
     def _features(self) -> CameraEntityFeature:
-        return CameraEntityFeature.STREAM if self._passthrough() else CameraEntityFeature(0)
+        return (
+            CameraEntityFeature.STREAM
+            if self._passthrough()
+            else CameraEntityFeature(0)
+        )
 
     def _codec_seen(self) -> None:
         features = self._features()
@@ -698,14 +742,16 @@ class HikLocalCamera(Camera):
         if sink is None:
             return web.Response(status=503, text="no live feed")
         mux = TsMuxer(self._source.codec)
-        response = web.StreamResponse(status=200, headers={"Content-Type": "video/mp2t"})
+        response = web.StreamResponse(
+            status=200, headers={"Content-Type": "video/mp2t"}
+        )
         pending = b""
         try:
             await response.prepare(request)
             while True:
                 try:
                     item = await asyncio.wait_for(sink.queue.get(), _FRAME_TIMEOUT)
-                except (TimeoutError, asyncio.TimeoutError):
+                except TimeoutError:
                     break
                 if item is None:
                     break
@@ -722,14 +768,15 @@ class HikLocalCamera(Camera):
         return response
 
     # -- live MJPEG -------------------------------------------------------
-    async def handle_async_mjpeg_stream(self, request: web.Request) -> web.StreamResponse:
+    async def handle_async_mjpeg_stream(
+        self, request: web.Request
+    ) -> web.StreamResponse:
         if not await self._source.acquire(_LIVE_ACQUIRE_TIMEOUT):
             return web.Response(status=503, text="no live feed")
         response = web.StreamResponse(
             status=200,
             headers={
-                "Content-Type":
-                    f"multipart/x-mixed-replace; boundary={_MJPEG_BOUNDARY}"
+                "Content-Type": f"multipart/x-mixed-replace; boundary={_MJPEG_BOUNDARY}"
             },
         )
         seq = 0
@@ -744,8 +791,11 @@ class HikLocalCamera(Camera):
                 await response.write(
                     b"--" + _MJPEG_BOUNDARY.encode() + b"\r\n"
                     b"Content-Type: image/jpeg\r\n"
-                    b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
-                    + jpeg + b"\r\n"
+                    b"Content-Length: "
+                    + str(len(jpeg)).encode()
+                    + b"\r\n\r\n"
+                    + jpeg
+                    + b"\r\n"
                 )
         except (ConnectionResetError, ConnectionAbortedError, asyncio.CancelledError):
             pass

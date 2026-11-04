@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
+from collections.abc import Callable
 from threading import Event, Lock, Thread, current_thread
 from typing import Any, Protocol
 
@@ -18,6 +18,7 @@ class PushSession(Protocol):
     def run(self, stopped: Event) -> None:
         """Run until disconnected or cancelled."""
         raise NotImplementedError
+
     def close(self) -> None:
         """Interrupt and release the session."""
         raise NotImplementedError
@@ -31,7 +32,9 @@ class PushWorker:
     is used: reconnecting with an old session key is not sufficient.
     """
 
-    def __init__(self, factory: Callable[[], PushSession], *, retry_delay: float = 30) -> None:
+    def __init__(
+        self, factory: Callable[[], PushSession], *, retry_delay: float = 30
+    ) -> None:
         if retry_delay <= 0:
             raise ValueError("Retry delay must be positive")
         self.failure: EzvizPushFatalError | None = None
@@ -70,7 +73,9 @@ class PushWorker:
                 "attempts": self._attempts,
                 "transient_failures": self._transient_failures,
                 "last_error_type": self._last_error_type,
-                "fatal_error_type": type(self.failure).__name__ if self.failure else None,
+                "fatal_error_type": type(self.failure).__name__
+                if self.failure
+                else None,
             }
         diagnostics = getattr(session, "diagnostics", None)
         snapshot["session"] = diagnostics() if callable(diagnostics) else None
@@ -131,14 +136,19 @@ class PushWorker:
                     self._last_error_type = type(error).__name__
                     self._state = "fatal"
                     self._stopped.set()
-                _LOGGER.error("Channel-99 stopped; caller intervention required (%s)", type(error).__name__)
+                _LOGGER.error(
+                    "Channel-99 stopped; caller intervention required (%s)",
+                    type(error).__name__,
+                )
             except Exception as error:
                 if not self._stopped.is_set():
                     with self._lock:
                         self._transient_failures += 1
                         self._last_error_type = type(error).__name__
                         self._state = "retry_wait"
-                    _LOGGER.warning("Channel-99 connection interrupted; retry scheduled")
+                    _LOGGER.warning(
+                        "Channel-99 connection interrupted; retry scheduled"
+                    )
             finally:
                 if session is not None:
                     self._close(session)

@@ -37,7 +37,7 @@ ISAPI_PATHS = (
 def _attempt(fetch) -> Any:
     try:
         return fetch()
-    except Exception as err:  # noqa: BLE001
+    except Exception as err:
         return {"error": f"{type(err).__name__}: {err}"}
 
 
@@ -51,10 +51,12 @@ def _isapi_json(client, serial: str, path: str) -> Any:
 
 def collect(client, devices) -> dict[str, dict]:
     """Query the cloud and each station for the raw door/channel data."""
-    pagelist = _attempt(lambda: client._get(
-        "/v3/userdevices/v1/devices/pagelist"
-        "?groupId=-1&limit=50&offset=0&filter=CONNECTION,STATUS,STATUS_EXT"
-    ))
+    pagelist = _attempt(
+        lambda: client._get(
+            "/v3/userdevices/v1/devices/pagelist"
+            "?groupId=-1&limit=50&offset=0&filter=CONNECTION,STATUS,STATUS_EXT"
+        )
+    )
     out: dict[str, dict] = {}
     for dev in devices:
         serial = dev.serial
@@ -62,11 +64,15 @@ def collect(client, devices) -> dict[str, dict]:
             "device": asdict(dev),
             "status_info": (pagelist.get("statusInfos") or {}).get(serial),
             "connection_info": (pagelist.get("connectionInfos") or {}).get(serial),
-            "cameras_info": _attempt(lambda: client._get(
-                f"/v3/userdevices/v1/cameras/info?deviceSerial={serial}"
-            )),
+            "cameras_info": _attempt(
+                lambda serial=serial: client._get(
+                    f"/v3/userdevices/v1/cameras/info?deviceSerial={serial}"
+                )
+            ),
             "isapi": {
-                path: _attempt(lambda: _isapi_json(client, serial, path))
+                path: _attempt(
+                    lambda serial=serial, path=path: _isapi_json(client, serial, path)
+                )
                 for path in ISAPI_PATHS
             },
         }
@@ -134,4 +140,6 @@ async def async_get_config_entry_diagnostics(
         "stations": live,
         "chimes": [_chime_report(chime) for chime in data["chimes"].values()],
     }
-    return anonymize(async_redact_data(report, TO_REDACT), [dev.serial for dev in devices])
+    return anonymize(
+        async_redact_data(report, TO_REDACT), [dev.serial for dev in devices]
+    )

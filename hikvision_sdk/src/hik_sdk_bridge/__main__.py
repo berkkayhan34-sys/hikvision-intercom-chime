@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 import signal
 import sys
 import threading
+from pathlib import Path
 
 from . import config as app_config
 from .sdk import Sdk, SdkError
@@ -19,8 +19,10 @@ LIBRARY_DIRECTORY = Path(os.environ.get("HIK_SDK_LIB_DIR", "/app/sdk"))
 
 
 def main() -> int:
-    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=os.environ.get("LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     log = logging.getLogger("hik_sdk_bridge")
     try:
         options = app_config.load()

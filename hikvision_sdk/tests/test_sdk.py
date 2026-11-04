@@ -1,10 +1,16 @@
 import ctypes
-from ctypes import memmove, sizeof
 import json
+from ctypes import memmove, sizeof
 
 import pytest
 
-from hik_sdk_bridge.sdk import DeviceInfoV30, Sdk, SdkError, XmlConfigInput, XmlConfigOutput
+from hik_sdk_bridge.sdk import (
+    DeviceInfoV30,
+    Sdk,
+    SdkError,
+    XmlConfigInput,
+    XmlConfigOutput,
+)
 
 
 class Lib:
@@ -45,11 +51,15 @@ class _Function:
         if self.name == "NET_DVR_Init":
             return 1
         if self.name == "NET_DVR_STDXMLConfig":
-            request = ctypes.string_at(args[1]._obj.request_url, args[1]._obj.request_url_length)
-            lib.requests = getattr(lib, "requests", []) + [request]
+            request = ctypes.string_at(
+                args[1]._obj.request_url, args[1]._obj.request_url_length
+            )
+            lib.requests = [*getattr(lib, "requests", []), request]
             body = lib.raw_response
             if body is None:
-                body = json.dumps({"CallStatus": {"status": lib.call_status_value}}).encode()
+                body = json.dumps(
+                    {"CallStatus": {"status": lib.call_status_value}}
+                ).encode()
             memmove(args[2]._obj.response, body, len(body))
             return lib.status_ok
         if self.name == "NET_DVR_StartVoiceCom_MR_V30":
@@ -64,14 +74,16 @@ def test_struct_layouts_match_the_sdk_headers():
     assert sizeof(DeviceInfoV30) >= 80
     assert XmlConfigInput.request_url.offset == 8 and XmlConfigInput.body.offset == 24
     assert sizeof(XmlConfigInput) == 72 and sizeof(XmlConfigOutput) == 72
-    assert DeviceInfoV30.device_type.offset == 48 + 14  # after serial and 14 BYTE fields
+    assert (
+        DeviceInfoV30.device_type.offset == 48 + 14
+    )  # after serial and 14 BYTE fields
 
 
 def test_login_returns_user_id_and_serial_and_sends_credentials_as_bytes():
     lib = Lib()
     user_id, serial = Sdk(lib).login("192.168.0.9", 8000, "admin", "pw")
     assert (user_id, serial) == (5, "ABC123")
-    name, args = [call for call in lib.calls if call[0] == "NET_DVR_Login_V30"][0]
+    _name, args = next(call for call in lib.calls if call[0] == "NET_DVR_Login_V30")
     assert args[:4] == (b"192.168.0.9", 8000, b"admin", b"pw")
 
 
@@ -84,9 +96,19 @@ def test_failed_login_carries_only_the_error_code():
     assert "very-secret" not in str(error.value) and "192.168" not in str(error.value)
 
 
-@pytest.mark.parametrize("raw, expected", [
-    ("idle", "idle"), ("IDLE", "idle"), ("ring", "ringing"), ("ringing", "ringing"),
-    ("onCall", "in_call"), ("talking", "in_call"), ("weird", "unknown"), ("", "unknown")])
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("idle", "idle"),
+        ("IDLE", "idle"),
+        ("ring", "ringing"),
+        ("ringing", "ringing"),
+        ("onCall", "in_call"),
+        ("talking", "in_call"),
+        ("weird", "unknown"),
+        ("", "unknown"),
+    ],
+)
 def test_call_state_mapping(raw, expected):
     lib = Lib()
     lib.call_status_value = raw
@@ -115,7 +137,7 @@ def test_voice_session_calls_and_failures():
     assert sdk.start_voice(5) == 3
     sdk.send_voice(3, b"\xff" * 160)
     sdk.stop_voice(3)
-    sent = [args for name, args in lib.calls if name == "NET_DVR_VoiceComSendData"][0]
+    sent = next(args for name, args in lib.calls if name == "NET_DVR_VoiceComSendData")
     assert sent[0] == 3 and sent[2] == 160
     lib.send_ok, lib.last_error = 0, 12
     with pytest.raises(SdkError):
@@ -129,7 +151,11 @@ def test_initialize_sets_timeouts():
     lib = Lib()
     Sdk(lib).initialize()
     names = [name for name, _ in lib.calls]
-    assert names[:3] == ["NET_DVR_Init", "NET_DVR_SetConnectTime", "NET_DVR_SetReconnect"]
+    assert names[:3] == [
+        "NET_DVR_Init",
+        "NET_DVR_SetConnectTime",
+        "NET_DVR_SetReconnect",
+    ]
 
 
 def test_device_audio_reaches_the_handler_and_local_audio_does_not():
@@ -140,10 +166,10 @@ def test_device_audio_reaches_the_handler_and_local_audio_does_not():
     callback = lib.calls[-1][1][2]
     assert callback is not None
     data = ctypes.create_string_buffer(b"\x01\x02\x03", 3)
-    callback(3, ctypes.addressof(data), 3, 1, None)   # from the device
-    callback(3, ctypes.addressof(data), 3, 0, None)   # collected locally: ignored
-    callback(3, None, 3, 1, None)                     # no buffer: ignored
-    callback(3, ctypes.addressof(data), 0, 1, None)   # no data: ignored
+    callback(3, ctypes.addressof(data), 3, 1, None)  # from the device
+    callback(3, ctypes.addressof(data), 3, 0, None)  # collected locally: ignored
+    callback(3, None, 3, 1, None)  # no buffer: ignored
+    callback(3, ctypes.addressof(data), 0, 1, None)  # no data: ignored
     assert received == [b"\x01\x02\x03"]
 
 

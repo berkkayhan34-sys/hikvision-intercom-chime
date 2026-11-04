@@ -15,14 +15,18 @@ import json
 import logging
 import re
 import threading
-import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import monotonic
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import quote
 
 import requests
+from defusedxml import (
+    ElementTree as ET,  # the station's answers come over the network; no DTD or entity is accepted
+)
+from defusedxml.common import DefusedXmlException
 
 try:
     from .lib.cas import EzvizCAS
@@ -45,7 +49,7 @@ def feature_code(account: str) -> str:
     The cloud's rate limiter buckets on this value, so a shared literal lets any
     one install's login storm lock out every other install of this integration.
     """
-    return hashlib.md5(f"hikconnect_intercom:{account}".encode("utf-8")).hexdigest()[:16]
+    return hashlib.md5(f"hikconnect_intercom:{account}".encode()).hexdigest()[:16]
 
 
 def _csv_first_int(value: str | None) -> int | None:
@@ -93,7 +97,9 @@ class HikConnectRateLimited(HikConnectError):
 class HikConnectClient:
     """Minimal Hik-Connect cloud client feeding the CPD7 local stream."""
 
-    def __init__(self, account: str, password: str, base_url: str = DEFAULT_BASE) -> None:
+    def __init__(
+        self, account: str, password: str, base_url: str = DEFAULT_BASE
+    ) -> None:
         self._account = account
         self._password = password
         self._base = base_url.rstrip("/")
@@ -128,7 +134,9 @@ class HikConnectClient:
         if code in (1013, 1014):
             raise HikConnectAuthError("bad username/password")
         if code == 1015:
-            raise HikConnectAuthError("CAPTCHA required; log in via the app once, then retry")
+            raise HikConnectAuthError(
+                "CAPTCHA required; log in via the app once, then retry"
+            )
         if "loginSession" not in r:
             raise HikConnectAuthError(f"login failed (meta code {code})")
         self._session_id = r["loginSession"]["sessionId"]
@@ -136,7 +144,9 @@ class HikConnectClient:
         self._session.headers["sessionId"] = self._session_id
         sci = self._raw("GET", "/v3/configurations/system/info")["systemConfigInfo"]
         self._sysconf = str(sci.get("sysConf", "")).split("|")
-        _LOGGER.debug("Hik-Connect login ok user=%s base=%s", self._username, self._base)
+        _LOGGER.debug(
+            "Hik-Connect login ok user=%s base=%s", self._username, self._base
+        )
         for listener in list(self._login_listeners):
             listener()
 
@@ -227,8 +237,10 @@ class HikConnectClient:
                 name = c.get("cameraName") or device.serial
                 sig = (c.get("deviceChannelInfo") or {}).get("signalStatus", 0)
                 if name != device.serial or sig == 1:
-                    cams.append(HikCamera(device.serial, int(ch), name, device.local_ip))
-        except Exception as err:  # noqa: BLE001
+                    cams.append(
+                        HikCamera(device.serial, int(ch), name, device.local_ip)
+                    )
+        except Exception as err:
             _LOGGER.warning("cameras/info failed for %s: %s", device.serial, err)
         if not cams:
             cams.append(HikCamera(device.serial, 1, device.name, device.local_ip))
@@ -260,9 +272,11 @@ class HikConnectClient:
                 doc = EzvizCAS(self.cas_token).cas_get_encryption(serial)
                 session = doc["Response"]["Session"]
                 return session["@Key"], session["@OperationCode"]
-            except Exception as err:  # noqa: BLE001 - CAS raises many shapes
+            except Exception as err:
                 if attempt == 2:
-                    raise HikConnectError(f"CAS key fetch failed for {serial}: {err}") from err
+                    raise HikConnectError(
+                        f"CAS key fetch failed for {serial}: {err}"
+                    ) from err
                 _LOGGER.debug("CAS key fetch failed (%s) — re-authenticating", err)
                 try:
                     self._relogin(self._session_id)
@@ -367,10 +381,14 @@ class HikConnectClient:
         active = status in ("ringing", "call in progress")
         if active:
             previous = self._last_callers.get(serial)
-            now = datetime.now(timezone.utc).timestamp()
+            now = datetime.now(UTC).timestamp()
             if info.get("devType", -1) == -1:
                 self._last_callers.pop(serial, None)
-            elif previous and self._in_call.get(serial) and previous[2].get("devNo") == info.get("devNo"):
+            elif (
+                previous
+                and self._in_call.get(serial)
+                and previous[2].get("devNo") == info.get("devNo")
+            ):
                 self._last_callers[serial] = (previous[0], now, info)
             else:
                 self._last_callers[serial] = (now, now, info)
@@ -384,7 +402,7 @@ class HikConnectClient:
             info = current["info"] if current["info"].get("devType", -1) != -1 else {}
         elif current["status"] == "idle":
             seen = self._last_callers.get(serial)
-            if seen is None or datetime.now(timezone.utc).timestamp() - seen[1] > _CALLER_MEMORY:
+            if seen is None or datetime.now(UTC).timestamp() - seen[1] > _CALLER_MEMORY:
                 return None
             ring = self.get_last_ring(serial)
             if ring is None or ring["time"] / 1000 >= seen[0]:
@@ -480,7 +498,7 @@ class HikConnectClient:
         r = self.isapi(serial, "GET", "/ISAPI/VideoIntercom/operationTime")
         try:
             root = ET.fromstring(r.get("data") or "")
-        except ET.ParseError:
+        except (ET.ParseError, DefusedXmlException):
             return {}
         out: dict[str, int] = {}
         for el in root:
@@ -496,7 +514,9 @@ class HikConnectClient:
             if msg.get("subType") == 2701 and msg.get("time"):
                 cached = self._last_rings.get(serial)
                 if cached and cached["msg_id"] == msg.get("msgId"):
-                    cached["calling_status"] = (msg.get("ext") or {}).get("callingStatus")
+                    cached["calling_status"] = (msg.get("ext") or {}).get(
+                        "callingStatus"
+                    )
                     return cached
                 skew = self._clock_skew_ms(serial)
                 if skew is None:
@@ -515,8 +535,8 @@ class HikConnectClient:
         m = re.search(r"<localTime>(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)", cur)
         if not m:
             return None
-        wall = datetime.fromisoformat(m.group(1)).replace(tzinfo=timezone.utc)
-        return round((wall - datetime.now(timezone.utc)).total_seconds()) * 1000
+        wall = datetime.fromisoformat(m.group(1)).replace(tzinfo=UTC)
+        return round((wall - datetime.now(UTC)).total_seconds()) * 1000
 
     def set_time_now(self, serial: str, wall_now: datetime) -> None:
         """Set the device clock to `wall_now` (the caller's real local wall time).
@@ -552,8 +572,11 @@ class HikConnectClient:
     def set_dnd(self, serial: str, on: bool) -> None:
         self._post(
             "/v3/unifiedmsg/notify/nodisturb",
-            {"devices": serial, "type": "27",
-             "enableNoDisturb": "true" if on else "false"},
+            {
+                "devices": serial,
+                "type": "27",
+                "enableNoDisturb": "true" if on else "false",
+            },
         )
 
     def set_time_config(
@@ -679,7 +702,9 @@ class HikConnectClient:
     def _meta_code(payload: dict) -> int:
         meta = payload.get("meta")
         if not isinstance(meta, dict) or "code" not in meta:
-            raise HikConnectError(f"login: unexpected reply {json.dumps(payload)[:200]}")
+            raise HikConnectError(
+                f"login: unexpected reply {json.dumps(payload)[:200]}"
+            )
         return meta["code"]
 
     @staticmethod
@@ -688,7 +713,9 @@ class HikConnectClient:
         try:
             payload = r.json()
         except ValueError as err:
-            raise HikConnectError(f"{method} {path}: non-JSON reply ({r.status_code})") from err
+            raise HikConnectError(
+                f"{method} {path}: non-JSON reply ({r.status_code})"
+            ) from err
         if r.status_code == 429 or payload.get("code") == 429:
             raise HikConnectRateLimited(
                 f"{method} {path}: rate-limited by the cloud "
@@ -710,7 +737,9 @@ class HikConnectClient:
         """
         for attempt in (1, 2):
             data = data_factory() if data_factory else None
-            r = self._session.request(method, f"{self._base}{path}", data=data, timeout=25)
+            r = self._session.request(
+                method, f"{self._base}{path}", data=data, timeout=25
+            )
             payload = self._json(r, method, path)
             if not self._unauthorized(r.status_code, payload):
                 return payload

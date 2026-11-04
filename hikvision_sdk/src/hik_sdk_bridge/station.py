@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from contextlib import contextmanager
 import logging
 import queue
 import threading
 import time
+from collections.abc import Iterable
+from contextlib import contextmanager, suppress
 
 from .config import StationConfig
 from .g711 import pcm16le_to_mulaw
@@ -23,7 +23,9 @@ MIN_PCM_BYTES = 2 * FRAME_BYTES
 MAX_PCM_BYTES = 1_048_576  # ~65 s at 8 kHz PCM16; the integration sends at most 60 s
 MAX_CALL_SECONDS = 600  # one call's audio session; longer than any door call
 TALK_LEAD_SECONDS = 0.5  # how far ahead of real time a talker may send
-LISTEN_QUEUE_FRAMES = 100  # about two seconds of door audio per listener; older audio is dropped
+LISTEN_QUEUE_FRAMES = (
+    100  # about two seconds of door audio per listener; older audio is dropped
+)
 
 
 class StationError(Exception):
@@ -44,7 +46,9 @@ class Station:
         self._serial: str | None = None
         self._broadcast: threading.Thread | None = None
         self._stop = threading.Event()
-        self._call_audio: int | None = None  # SDK voice handle while a call's audio is open
+        self._call_audio: int | None = (
+            None  # SDK voice handle while a call's audio is open
+        )
         self._call_users = 0
         self._listeners: set[queue.Queue] = set()
 
@@ -55,8 +59,11 @@ class Station:
                 return True
             try:
                 self._user_id, self._serial = self._sdk.login(
-                    self._config.host, self._config.port,
-                    self._config.username, self._config.password)
+                    self._config.host,
+                    self._config.port,
+                    self._config.username,
+                    self._config.password,
+                )
             except SdkError as error:
                 _LOGGER.warning("Station %s login failed: %s", self.name, error)
                 return False
@@ -83,7 +90,9 @@ class Station:
                 try:
                     call_state = self._sdk.call_state(self._user_id)
                 except SdkError as error:
-                    _LOGGER.warning("Station %s call status failed: %s", self.name, error)
+                    _LOGGER.warning(
+                        "Station %s call status failed: %s", self.name, error
+                    )
                     self._drop_session()
                     connected = False
             if self._call_audio is not None and call_state != "in_call":
@@ -116,13 +125,18 @@ class Station:
                     raise StationError("call_active")
                 handle = self._sdk.start_voice(self._user_id)
             except SdkError as error:
-                _LOGGER.warning("Station %s broadcast start failed: %s", self.name, error)
+                _LOGGER.warning(
+                    "Station %s broadcast start failed: %s", self.name, error
+                )
                 self._drop_session()
                 raise StationError("station_offline") from None
             self._stop.clear()
             self._broadcast = threading.Thread(
-                target=self._stream, args=(handle, mulaw), daemon=True,
-                name=f"broadcast-{self.name}")
+                target=self._stream,
+                args=(handle, mulaw),
+                daemon=True,
+                name=f"broadcast-{self.name}",
+            )
             self._broadcast.start()
         return len(mulaw) / SAMPLE_RATE
 
@@ -132,7 +146,7 @@ class Station:
             for offset in range(0, len(mulaw), FRAME_BYTES):
                 if self._stop.is_set():
                     break
-                frame = mulaw[offset:offset + FRAME_BYTES]
+                frame = mulaw[offset : offset + FRAME_BYTES]
                 frame += bytes([SILENCE]) * (FRAME_BYTES - len(frame))
                 self._sdk.send_voice(handle, frame)
                 deadline += FRAME_SECONDS
@@ -179,10 +193,8 @@ class Station:
         for listener in list(self._listeners):
             self._offer(listener, None)
         if handle is not None:
-            try:
+            with suppress(SdkError):
                 self._sdk.stop_voice(handle)
-            except SdkError:
-                pass
             _LOGGER.info("Station %s call audio finished", self.name)
 
     @contextmanager
@@ -226,15 +238,24 @@ class Station:
 
             def send(frame: bytes) -> None:
                 nonlocal frames
-                wait = started + frames * FRAME_SECONDS - TALK_LEAD_SECONDS - time.monotonic()
+                wait = (
+                    started
+                    + frames * FRAME_SECONDS
+                    - TALK_LEAD_SECONDS
+                    - time.monotonic()
+                )
                 if wait > 0:
                     time.sleep(wait)
                 if self._call_audio != handle:
-                    raise StationError("no_call")  # the call ended while we were talking
+                    raise StationError(
+                        "no_call"
+                    )  # the call ended while we were talking
                 try:
                     self._sdk.send_voice(handle, frame)
                 except SdkError as error:
-                    _LOGGER.warning("Station %s call audio interrupted: %s", self.name, error)
+                    _LOGGER.warning(
+                        "Station %s call audio interrupted: %s", self.name, error
+                    )
                     with self._lock:
                         self._close_call_audio()
                     raise StationError("station_offline") from None
@@ -251,7 +272,7 @@ class Station:
                 send(bytes(pending) + bytes([SILENCE]) * (FRAME_BYTES - len(pending)))
             return frames
 
-    def listen(self) -> "CallListener":
+    def listen(self) -> CallListener:
         """Start receiving the door's audio; raises like ``talk`` when there is no call."""
         listener = queue.Queue(maxsize=LISTEN_QUEUE_FRAMES)
         session = self._call_session()

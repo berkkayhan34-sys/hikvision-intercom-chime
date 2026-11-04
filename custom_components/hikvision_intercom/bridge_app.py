@@ -7,9 +7,9 @@ options. They are never returned, logged or stored in a config entry.
 from __future__ import annotations
 
 import asyncio
+import re
 from copy import deepcopy
 from dataclasses import dataclass
-import re
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -31,6 +31,7 @@ class AppInfo:
 def _supervisor_client(hass: HomeAssistant):
     # Lazy import: Container installs must reach a friendly error, not an ImportError.
     from homeassistant.components.hassio.handler import get_supervisor_client
+
     return get_supervisor_client(hass)
 
 
@@ -54,7 +55,9 @@ async def find_app(hass: HomeAssistant) -> AppInfo:
     except Exception:
         # Supervisor errors may embed configuration; they must not reach logs or the UI.
         raise SetupError("app_required") from None
-    return AppInfo(info.slug, info.hostname, _is_running(info.state), dict(info.options or {}))
+    return AppInfo(
+        info.slug, info.hostname, _is_running(info.state), dict(info.options or {})
+    )
 
 
 async def _apply(hass: HomeAssistant, app: AppInfo, options: dict) -> None:
@@ -66,8 +69,12 @@ async def _apply(hass: HomeAssistant, app: AppInfo, options: dict) -> None:
     written = False
     try:
         if options != previous:
-            written = True  # a timeout may land after Supervisor already applied the write
-            await client.addons.set_addon_options(app.slug, AddonsOptions(config=options))
+            written = (
+                True  # a timeout may land after Supervisor already applied the write
+            )
+            await client.addons.set_addon_options(
+                app.slug, AddonsOptions(config=options)
+            )
             if app.running:
                 await client.addons.restart_addon(app.slug)
             else:
@@ -77,7 +84,9 @@ async def _apply(hass: HomeAssistant, app: AppInfo, options: dict) -> None:
     except (Exception, asyncio.CancelledError) as failure:
         if written:
             try:
-                await client.addons.set_addon_options(app.slug, AddonsOptions(config=previous))
+                await client.addons.set_addon_options(
+                    app.slug, AddonsOptions(config=previous)
+                )
                 if app.running:
                     await client.addons.restart_addon(app.slug)
             except Exception:
@@ -89,6 +98,7 @@ async def _apply(hass: HomeAssistant, app: AppInfo, options: dict) -> None:
 
 def _lock(hass: HomeAssistant) -> asyncio.Lock:
     from .const import DOMAIN
+
     return hass.data.setdefault(DOMAIN, {}).setdefault("app_lock", asyncio.Lock())
 
 

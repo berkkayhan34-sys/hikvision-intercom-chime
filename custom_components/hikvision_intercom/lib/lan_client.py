@@ -7,6 +7,7 @@ are documented in docs/cpd7-stream-recipe/02-PROTOCOL.md.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import re
@@ -93,10 +94,7 @@ def _parse_response(wire: bytes, key: bytes) -> tuple[dict, bytes]:
     cmd = struct.unpack(">I", wire[16:20])[0]
     body_len = struct.unpack(">I", wire[24:28])[0]
     body = wire[HEADER_LEN : HEADER_LEN + body_len]
-    if body.startswith(b"<?xml"):
-        plain = body
-    else:
-        plain = _decrypt(key, body)
+    plain = body if body.startswith(b"<?xml") else _decrypt(key, body)
     return {"seq": seq, "cmd": cmd, "body_len": body_len}, plain
 
 
@@ -198,7 +196,6 @@ class Cpd7LanClient:
     Sequence:
         c = Cpd7LanClient(host, related_device, aes_key)
         c.start()                              # blocks ~1s for handshake
-        ecdh_priv = c.ecdh_priv                # for StreamDecoder
         while True:
             buf = c.read_chunk()
             if not buf:
@@ -236,13 +233,8 @@ class Cpd7LanClient:
         self._recv_timeout = recv_timeout
         self._cmd_timeout = cmd_timeout
         self._play_sock: socket.socket | None = None
-        self._ecdh_priv = None
         self._ecdh_pub_b64: str | None = None
         self._closed = False
-
-    @property
-    def ecdh_priv(self):
-        return self._ecdh_priv
 
     def _send_cmd(
         self, sock: socket.socket, seq: int, cmd: int, xml: bytes, tag: str
@@ -267,7 +259,7 @@ class Cpd7LanClient:
         if self._play_sock is not None:
             raise RuntimeError("already started")
 
-        self._ecdh_priv, self._ecdh_pub_b64 = generate_ecdh_keypair()
+        _private_key, self._ecdh_pub_b64 = generate_ecdh_keypair()
         my_ip = _discover_local_ip(self._host)
         _LOGGER.debug("CPD7 LAN start host=%s my_ip=%s", self._host, my_ip)
 
@@ -342,12 +334,8 @@ class Cpd7LanClient:
     def close(self) -> None:
         self._closed = True
         if self._play_sock is not None:
-            try:
+            with contextlib.suppress(OSError):
                 self._play_sock.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            try:
+            with contextlib.suppress(OSError):
                 self._play_sock.close()
-            except OSError:
-                pass
             self._play_sock = None

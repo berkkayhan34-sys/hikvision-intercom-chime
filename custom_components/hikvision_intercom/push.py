@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import hashlib
 import json
 import logging
@@ -22,10 +23,26 @@ _MQTT_PORT = 1882
 
 # CSV field order of the message `ext` string (from EZVIZ push protocol).
 _EXT_FIELDS = (
-    "channel_type", "time", "device_serial", "channel_no", "alert_type_code",
-    "default_pic_url", "media_url_alt1", "media_url_alt2", "resource_type",
-    "status_flag", "file_id", "is_encrypted", "pic_checksum", "is_dev_video",
-    "metadata", "msg_id", "image", "device_name", "reserved", "sequence_number",
+    "channel_type",
+    "time",
+    "device_serial",
+    "channel_no",
+    "alert_type_code",
+    "default_pic_url",
+    "media_url_alt1",
+    "media_url_alt2",
+    "resource_type",
+    "status_flag",
+    "file_id",
+    "is_encrypted",
+    "pic_checksum",
+    "is_dev_video",
+    "metadata",
+    "msg_id",
+    "image",
+    "device_name",
+    "reserved",
+    "sequence_number",
 )
 
 
@@ -55,7 +72,9 @@ class HikConnectPush:
             fallback = push_addr.replace(".hik-connect.com", ".ezvizlife.com")
             if fallback == push_addr:
                 raise
-            _LOGGER.debug("push register on %s failed (%s), using %s", push_addr, err, fallback)
+            _LOGGER.debug(
+                "push register on %s failed (%s), using %s", push_addr, err, fallback
+            )
             push_addr = fallback
             self.used_fallback_host = True
             client_id, broker = await self._register(session, push_addr)
@@ -78,7 +97,9 @@ class HikConnectPush:
         session = async_get_clientsession(self._hass)
         try:
             _, session_id, username = await self._login(session)
-            await self._start_push(session, self._push_addr, self._client_id, session_id, username)
+            await self._start_push(
+                session, self._push_addr, self._client_id, session_id, username
+            )
         except (aiohttp.ClientError, HikConnectError, KeyError, ValueError) as err:
             _LOGGER.warning("Hik-Connect push session refresh failed: %s", err)
             return
@@ -90,13 +111,21 @@ class HikConnectPush:
             "account": self._account,
             "password": hashlib.md5(self._password.encode("utf-8")).hexdigest(),
         }
-        headers = {"clientType": "55", "lang": "en-US", "featureCode": self._feature_code}
+        headers = {
+            "clientType": "55",
+            "lang": "en-US",
+            "featureCode": self._feature_code,
+        }
         base = self._base_url
-        async with session.post(f"{base}/v3/users/login/v2", data=data, headers=headers) as r:
+        async with session.post(
+            f"{base}/v3/users/login/v2", data=data, headers=headers
+        ) as r:
             j = await r.json()
         if (j.get("meta") or {}).get("code") == 1100:
             base = f"https://{j['loginArea']['apiDomain']}"
-            async with session.post(f"{base}/v3/users/login/v2", data=data, headers=headers) as r:
+            async with session.post(
+                f"{base}/v3/users/login/v2", data=data, headers=headers
+            ) as r:
                 j = await r.json()
         if "loginSession" not in j:
             raise HikConnectError(f"push login failed: {json.dumps(j)[:200]}")
@@ -104,24 +133,36 @@ class HikConnectPush:
 
     async def _get_push_addr(self, session, base, session_id):
         headers = {
-            "clientType": "55", "lang": "en-US",
-            "featureCode": self._feature_code, "sessionId": session_id,
+            "clientType": "55",
+            "lang": "en-US",
+            "featureCode": self._feature_code,
+            "sessionId": session_id,
         }
-        async with session.get(f"{base}/v3/configurations/system/info", headers=headers) as r:
+        async with session.get(
+            f"{base}/v3/configurations/system/info", headers=headers
+        ) as r:
             j = await r.json()
         return j["systemConfigInfo"]["pushAddr"]
 
     async def _register(self, session, push_addr):
-        auth = "Basic " + base64.b64encode(
-            f"{MQTT_APP_KEY}:{MQTT_APP_SECRET}".encode("ascii")
-        ).decode()
+        auth = (
+            "Basic "
+            + base64.b64encode(
+                f"{MQTT_APP_KEY}:{MQTT_APP_SECRET}".encode("ascii")
+            ).decode()
+        )
         data = {
-            "appKey": MQTT_APP_KEY, "clientType": "5", "mac": self._feature_code,
-            "token": "123456", "version": "v1.3.0",
+            "appKey": MQTT_APP_KEY,
+            "clientType": "5",
+            "mac": self._feature_code,
+            "token": "123456",
+            "version": "v1.3.0",
         }
         async with session.post(
-            f"https://{push_addr}/v1/getClientId", data=data,
-            headers={"Authorization": auth}, allow_redirects=False,
+            f"https://{push_addr}/v1/getClientId",
+            data=data,
+            headers={"Authorization": auth},
+            allow_redirects=False,
         ) as r:
             j = await r.json()
         d = j["data"]
@@ -129,11 +170,17 @@ class HikConnectPush:
 
     async def _start_push(self, session, push_addr, client_id, session_id, username):
         data = {
-            "appKey": MQTT_APP_KEY, "clientId": client_id, "clientType": 5,
-            "sessionId": session_id, "username": username, "token": "123456",
+            "appKey": MQTT_APP_KEY,
+            "clientId": client_id,
+            "clientType": 5,
+            "sessionId": session_id,
+            "username": username,
+            "token": "123456",
         }
         async with session.post(
-            f"https://{push_addr}/api/push/start", data=data, allow_redirects=False,
+            f"https://{push_addr}/api/push/start",
+            data=data,
+            allow_redirects=False,
         ) as r:
             j = await r.json()
         if j.get("status") != 200:
@@ -141,13 +188,18 @@ class HikConnectPush:
 
     async def _stop_push(self, session, client_id):
         data = {
-            "appKey": MQTT_APP_KEY, "clientId": client_id, "clientType": 5,
-            "sessionId": self._session_id, "username": self._username,
+            "appKey": MQTT_APP_KEY,
+            "clientId": client_id,
+            "clientType": 5,
+            "sessionId": self._session_id,
+            "username": self._username,
         }
         try:
             async with session.post(
-                f"https://{self._push_addr}/api/push/stop", data=data,
-                allow_redirects=False, timeout=aiohttp.ClientTimeout(total=5),
+                f"https://{self._push_addr}/api/push/stop",
+                data=data,
+                allow_redirects=False,
+                timeout=aiohttp.ClientTimeout(total=5),
             ) as r:
                 j = await r.json(content_type=None)
         except (aiohttp.ClientError, TimeoutError, ValueError) as err:
@@ -160,10 +212,12 @@ class HikConnectPush:
         host = tail.split(":")[0]
         port = int(tail.split(":")[1]) if ":" in tail else _MQTT_PORT
 
-        kwargs = dict(
-            client_id=client_id, clean_session=False,
-            protocol=mqtt.MQTTv311, transport="tcp",
-        )
+        kwargs = {
+            "client_id": client_id,
+            "clean_session": False,
+            "protocol": mqtt.MQTTv311,
+            "transport": "tcp",
+        }
         cbver = getattr(mqtt, "CallbackAPIVersion", None)
         if cbver is not None:
             kwargs["callback_api_version"] = cbver.VERSION1
@@ -181,7 +235,7 @@ class HikConnectPush:
         try:
             self._client.loop_stop()
             self._client.disconnect()
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         self._client = None
 
@@ -202,7 +256,10 @@ class HikConnectPush:
         ext = data.get("ext")
         if isinstance(ext, str):
             parts = ext.split(",")
-            ext = {n: (parts[i] if i < len(parts) else None) for i, n in enumerate(_EXT_FIELDS)}
+            ext = {
+                n: (parts[i] if i < len(parts) else None)
+                for i, n in enumerate(_EXT_FIELDS)
+            }
             data["ext"] = ext
         if not isinstance(ext, dict):
             ext = {}
@@ -212,10 +269,8 @@ class HikConnectPush:
         _LOGGER.info("Hik-Connect push: serial=%s alert_code=%s", serial, alert_code)
         if not serial:
             return
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             alert_code = int(alert_code)
-        except (TypeError, ValueError):
-            pass
 
         self._hass.loop.call_soon_threadsafe(
             async_dispatcher_send, self._hass, call_signal(serial), alert_code, data

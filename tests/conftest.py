@@ -28,6 +28,7 @@ PASSWORD = "very-secret-station-password"
 async def _custom_integrations(hass, enable_custom_integrations):
     """The conversation component (a dependency, for the door intercom assistant) needs the core integration's store."""
     from homeassistant.setup import async_setup_component
+
     assert await async_setup_component(hass, "homeassistant", {})
 
 
@@ -51,7 +52,17 @@ class FakeCloud:
             raise self.login_error
 
     def get_devices(self):
-        return [HikDevice(SERIAL, "DS-KH6320-WTE1", None, "DS-KH6320-WTE1", {1: 1}, "V2.2.108", True)]
+        return [
+            HikDevice(
+                SERIAL,
+                "DS-KH6320-WTE1",
+                None,
+                "DS-KH6320-WTE1",
+                {1: 1},
+                "V2.2.108",
+                True,
+            )
+        ]
 
     def get_cameras(self, device):
         return []
@@ -86,7 +97,7 @@ class FakeCloud:
     def answer_call(self, serial):
         if self.answer_error:
             raise self.answer_error
-        self.answered = getattr(self, "answered", []) + [serial]
+        self.answered = [*getattr(self, "answered", []), serial]
         return {}
 
     def _get(self, path):
@@ -101,11 +112,21 @@ def cloud():
     """Patch the cloud client class and the two realtime push listeners."""
     instance = FakeCloud()
     failing = MagicMock()
-    failing.return_value.async_start = AsyncMock(side_effect=RuntimeError("push disabled in tests"))
-    with patch("custom_components.hikvision_intercom.HikConnectClient", return_value=instance), \
-         patch("custom_components.hikvision_intercom.config_flow.HikConnectClient", return_value=instance), \
-         patch("custom_components.hikvision_intercom.HikConnectPush", failing), \
-         patch("custom_components.hikvision_intercom.HikConnectLongLink", failing):
+    failing.return_value.async_start = AsyncMock(
+        side_effect=RuntimeError("push disabled in tests")
+    )
+    with (
+        patch(
+            "custom_components.hikvision_intercom.HikConnectClient",
+            return_value=instance,
+        ),
+        patch(
+            "custom_components.hikvision_intercom.config_flow.HikConnectClient",
+            return_value=instance,
+        ),
+        patch("custom_components.hikvision_intercom.HikConnectPush", failing),
+        patch("custom_components.hikvision_intercom.HikConnectLongLink", failing),
+    ):
         yield instance
 
 
@@ -121,7 +142,9 @@ class FakeSupervisor:
 @pytest.fixture
 def supervisor(hass: HomeAssistant):
     hass.config.components.add("hassio")
-    app = AppInfo("a1b2c3d4_hikvision_sdk", APP_HOST, True, {"token": TOKEN, "stations": []})
+    app = AppInfo(
+        "a1b2c3d4_hikvision_sdk", APP_HOST, True, {"token": TOKEN, "stations": []}
+    )
     state = FakeSupervisor(app, [], [])
 
     async def configure(hass_, station):
@@ -131,26 +154,55 @@ def supervisor(hass: HomeAssistant):
     async def remove(hass_, name):
         state.removed.append(name)
 
-    with patch("custom_components.hikvision_intercom.chime.find_app", AsyncMock(return_value=app)), \
-         patch("custom_components.hikvision_intercom.config_flow.find_app", AsyncMock(return_value=app)), \
-         patch("custom_components.hikvision_intercom.config_flow.configure_station", configure), \
-         patch("custom_components.hikvision_intercom.remove_station", remove):
+    with (
+        patch(
+            "custom_components.hikvision_intercom.chime.find_app",
+            AsyncMock(return_value=app),
+        ),
+        patch(
+            "custom_components.hikvision_intercom.config_flow.find_app",
+            AsyncMock(return_value=app),
+        ),
+        patch(
+            "custom_components.hikvision_intercom.config_flow.configure_station",
+            configure,
+        ),
+        patch("custom_components.hikvision_intercom.remove_station", remove),
+    ):
         yield state
 
 
-def station_subentry(title: str = "Living Room Doorbell Chime", **data) -> ConfigSubentryData:
+def station_subentry(
+    title: str = "Living Room Doorbell Chime", **data
+) -> ConfigSubentryData:
     return ConfigSubentryData(
-        subentry_type="station", title=title, unique_id="192.168.0.50:8000",
-        data={"name": STATION_NAME, "host": "192.168.0.50", "port": 8000,
-              "username": "admin", "gain_db": 0, "repeats": 4, **data})
+        subentry_type="station",
+        title=title,
+        unique_id="192.168.0.50:8000",
+        data={
+            "name": STATION_NAME,
+            "host": "192.168.0.50",
+            "port": 8000,
+            "username": "admin",
+            "gain_db": 0,
+            "repeats": 4,
+            **data,
+        },
+    )
 
 
 @pytest.fixture
 def entry(hass: HomeAssistant) -> MockConfigEntry:
     config_entry = MockConfigEntry(
-        domain=DOMAIN, title="owner@example.test", unique_id="owner@example.test",
-        data={"account": "owner@example.test", "password": "cloud-password",
-              "base_url": "https://api.hik-connect.com"},
-        subentries_data=[station_subentry()])
+        domain=DOMAIN,
+        title="owner@example.test",
+        unique_id="owner@example.test",
+        data={
+            "account": "owner@example.test",
+            "password": "cloud-password",
+            "base_url": "https://api.hik-connect.com",
+        },
+        subentries_data=[station_subentry()],
+    )
     config_entry.add_to_hass(hass)
     return config_entry

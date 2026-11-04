@@ -1,7 +1,7 @@
 import hashlib
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from custom_components.hikvision_intercom import storage
 from custom_components.hikvision_intercom.audio import AudioError
@@ -26,18 +26,23 @@ class StorageTests(unittest.TestCase):
 
     def test_invalid_upload_does_not_change_old_source(self):
         old = self.store.add_source(wav())
-        with self.assertRaises(AudioError): self.store.add_source(b"not audio")
+        with self.assertRaises(AudioError):
+            self.store.add_source(b"not audio")
         self.assertEqual(self.store.source(old), wav())
 
     def test_path_traversal_rejected(self):
         for name in ("../outside", "..", "a/b", "C:\\secret"):
-            with self.assertRaises(AudioError): storage.AudioStore(self.root, name)
-            with self.assertRaises(AudioError): self.store.source(name)
+            with self.assertRaises(AudioError):
+                storage.AudioStore(self.root, name)
+            with self.assertRaises(AudioError):
+                self.store.source(name)
 
     def test_failed_atomic_write_leaves_no_partial_or_temporary_file(self):
         from unittest.mock import patch
+
         with patch.object(storage.os, "replace", side_effect=OSError("failure")):
-            with self.assertRaises(OSError): self.store.add_source(wav())
+            with self.assertRaises(OSError):
+                self.store.add_source(wav())
         self.assertEqual(list(self.store.directory.iterdir()), [])
 
     def test_removal_is_owned_files_only(self):
@@ -49,7 +54,8 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(list(self.store.directory.iterdir()), [unrelated])
 
     def test_source_quota_is_bounded(self):
-        for i in range(16): self.store.add_source(wav(bytes([i, 0]) * 4))
+        for i in range(16):
+            self.store.add_source(wav(bytes([i, 0]) * 4))
         with self.assertRaisesRegex(AudioError, "source_limit"):
             self.store.add_source(wav(b"\xff\0" * 4))
 
@@ -61,12 +67,14 @@ class StorageTests(unittest.TestCase):
             link.symlink_to(outside)
         except OSError:
             self.skipTest("Host does not permit creating test symlinks")
-        with self.assertRaises(AudioError): self.store.source("a" * 64)
+        with self.assertRaises(AudioError):
+            self.store.source("a" * 64)
 
     def test_corrupt_existing_source_is_not_overwritten(self):
         data = wav()
         digest = hashlib.sha256(data).hexdigest()
         target = self.store.directory / (digest + ".wav")
         target.write_bytes(b"foreign data")
-        with self.assertRaises(AudioError): self.store.add_source(data)
+        with self.assertRaises(AudioError):
+            self.store.add_source(data)
         self.assertEqual(target.read_bytes(), b"foreign data")

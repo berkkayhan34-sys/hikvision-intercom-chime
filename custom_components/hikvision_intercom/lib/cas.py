@@ -2,27 +2,26 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-import hashlib
 import datetime as dt
-from io import BytesIO
+import hashlib
 import ipaddress
-from itertools import cycle
 import logging
-from pathlib import Path
 import random
 import socket
 import ssl
 import struct
+from dataclasses import dataclass
+from io import BytesIO
+from itertools import cycle
+from pathlib import Path
 from typing import Any, cast
 from xml.parsers.expat import ExpatError
 
+import xmltodict
 from Crypto.Cipher import AES
 from cryptography import x509
-import xmltodict
 
-from ._const import FEATURE_CODE, XOR_KEY
-from ._const import InvalidHost, PyEzvizError
+from ._const import FEATURE_CODE, XOR_KEY, InvalidHost, PyEzvizError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -151,9 +150,7 @@ def _is_certificate_hostname_mismatch_error(err: ssl.SSLCertVerificationError) -
     """Return True only for a TLS certificate hostname mismatch."""
     return (
         getattr(err, "verify_code", None) == 62
-        or "hostname mismatch" in str(
-            getattr(err, "verify_message", "") or err
-        ).lower()
+        or "hostname mismatch" in str(getattr(err, "verify_message", "") or err).lower()
     )
 
 
@@ -205,7 +202,8 @@ def _certificate_matches_host(cert: x509.Certificate, host: str) -> bool:
         host_ip = None
     if host_ip is not None:
         return any(
-            ip_address == host_ip for ip_address in san.get_values_for_type(x509.IPAddress)
+            ip_address == host_ip
+            for ip_address in san.get_values_for_type(x509.IPAddress)
         )
     return any(
         _dns_name_matches(dns_name, host)
@@ -229,10 +227,13 @@ def _verify_expired_cas_certificate_hostname(sock: ssl.SSLSocket, *, host: str) 
             raise ssl.CertificateError("CAS TLS certificate hostname mismatch")
     except PyEzvizError:
         raise
-    except (UnicodeError, ssl.CertificateError, ValueError, x509.ExtensionNotFound) as err:
-        raise PyEzvizError(
-            f"CAS TLS certificate is not valid for {host}"
-        ) from err
+    except (
+        UnicodeError,
+        ssl.CertificateError,
+        ValueError,
+        x509.ExtensionNotFound,
+    ) as err:
+        raise PyEzvizError(f"CAS TLS certificate is not valid for {host}") from err
 
 
 def _send_all(sock: Any, payload: bytes) -> None:
@@ -355,15 +356,12 @@ def _build_operation_code_request(
     client_type: int = CAS_ANDROID_CLIENT_TYPE,
 ) -> bytes:
     """Build the observed get-operation-code CAS request."""
-    body = (
-        b'<?xml version="1.0" encoding="utf-8"?>\n<Request>\n\t'
-        + (
-            f"<ClientID>{session_id}</ClientID>"
-            f"\n\t<Sign>{hardware_code}</Sign>\n\t"
-            f"<DevSerial>{devserial}</DevSerial>"
-            f"\n\t<ClientType>{client_type}</ClientType>\n</Request>\n"
-        ).encode("latin1")
-    )
+    body = b'<?xml version="1.0" encoding="utf-8"?>\n<Request>\n\t' + (
+        f"<ClientID>{session_id}</ClientID>"
+        f"\n\t<Sign>{hardware_code}</Sign>\n\t"
+        f"<DevSerial>{devserial}</DevSerial>"
+        f"\n\t<ClientType>{client_type}</ClientType>\n</Request>\n"
+    ).encode("latin1")
     return (
         _cas_frame_header(
             sequence=5,
@@ -573,50 +571,13 @@ class EzvizCAS:
         # Trim the framed header/tail and convert XML to dict.
         body = _cas_response_body(response_bytes, context="get-encryption")
         if not body:
-            raise PyEzvizError("CAS get-encryption response did not contain an XML body")
+            raise PyEzvizError(
+                "CAS get-encryption response did not contain an XML body"
+            )
         try:
             doc = xmltodict.parse(body)
         except ExpatError as err:
-            raise PyEzvizError("Could not parse CAS get-encryption XML response") from err
+            raise PyEzvizError(
+                "Could not parse CAS get-encryption XML response"
+            ) from err
         return cast(dict[str, Any], doc)
-
-    def probe_local_operation_code(
-        self,
-        devserial: str,
-        *,
-        host: str,
-        port: int,
-    ) -> CasTransportResult:
-        """Probe whether a LAN command port accepts the cloud CAS query frame."""
-        return self._send_cas_payload(
-            _build_operation_code_request(
-                session_id=cast(str | None, self._token["session_id"]),
-                devserial=devserial,
-                hardware_code=self._hardware_code(),
-                client_type=self._client_type,
-            ),
-            host=host,
-            port=port,
-            use_tls=False,
-            expect_frame=False,
-        )
-
-    def set_camera_defence_state(self, serial: str, enable: int = 1) -> bool:
-        """Enable alarm notifications."""
-        device_session = CasDeviceSession.from_response(self.cas_get_encryption(serial))
-        host, port = self._cloud_address()
-        result = self._send_cas_payload(
-            _build_defence_request(
-                session_id=cast(str | None, self._token["session_id"]),
-                serial=serial,
-                device_session=device_session,
-                enable=enable,
-                client_type=self._client_type,
-            ),
-            host=host,
-            port=port,
-            use_tls=True,
-        )
-        _LOGGER.debug("Set camera response: %r", result.response)
-
-        return True

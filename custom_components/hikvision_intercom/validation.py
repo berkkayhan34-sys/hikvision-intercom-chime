@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import ipaddress
 import re
 import secrets
+from copy import deepcopy
 
 from .const import DEFAULT_SDK_PORT
 
@@ -23,14 +23,19 @@ def validate_station(host: str, port: int, username: str, password: str) -> None
         address = ipaddress.IPv4Address(host)
     except (ipaddress.AddressValueError, TypeError):
         raise SetupError("invalid_host") from None
-    if not any(address in ipaddress.IPv4Network(network) for network in _PRIVATE_NETWORKS):
+    if not any(
+        address in ipaddress.IPv4Network(network) for network in _PRIVATE_NETWORKS
+    ):
         raise SetupError("invalid_host")
     if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
         raise SetupError("invalid_port")
     for value in (username, password):
-        if (not isinstance(value, str) or not value
-                or len(value.encode("utf8")) > 64
-                or any(ord(character) < 32 for character in value)):
+        if (
+            not isinstance(value, str)
+            or not value
+            or len(value.encode("utf8")) > 64
+            or any(ord(character) < 32 for character in value)
+        ):
             raise SetupError("invalid_credentials")
 
 
@@ -57,10 +62,13 @@ def merge_station(options: dict, station: dict) -> dict:
     name = station["name"]
     for item in stations:
         if item.get("name") != name and (
-                item.get("host") == station["host"]
-                and item.get("port", DEFAULT_SDK_PORT) == station["port"]):
+            item.get("host") == station["host"]
+            and item.get("port", DEFAULT_SDK_PORT) == station["port"]
+        ):
             raise SetupError("duplicate_station")
-    entry = {key: station[key] for key in ("name", "host", "port", "username", "password")}
+    entry = {
+        key: station[key] for key in ("name", "host", "port", "username", "password")
+    }
     for index, item in enumerate(stations):
         if item.get("name") == name:
             stations[index] = entry
@@ -72,5 +80,7 @@ def merge_station(options: dict, station: dict) -> dict:
 
 def without_station(options: dict, name: str) -> dict:
     result = deepcopy(options)
-    result["stations"] = [item for item in result.get("stations", []) if item.get("name") != name]
+    result["stations"] = [
+        item for item in result.get("stations", []) if item.get("name") != name
+    ]
     return result

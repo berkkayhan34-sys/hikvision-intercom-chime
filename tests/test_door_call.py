@@ -9,7 +9,11 @@ from unittest.mock import patch
 import pytest
 from aiohttp import web
 from homeassistant.components import assist_pipeline, stt
-from homeassistant.components.assist_pipeline.pipeline import KEY_ASSIST_PIPELINE, PipelineEventType, PipelineStage
+from homeassistant.components.assist_pipeline.pipeline import (
+    KEY_ASSIST_PIPELINE,
+    PipelineEventType,
+    PipelineStage,
+)
 from homeassistant.core import Context
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
@@ -26,9 +30,13 @@ from .conftest import STATION_NAME, TOKEN
 from .test_chime import setup
 
 METADATA = stt.SpeechMetadata(
-    language="en", format=stt.AudioFormats.WAV, codec=stt.AudioCodecs.PCM,
-    bit_rate=stt.AudioBitRates.BITRATE_16, sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
-    channel=stt.AudioChannels.CHANNEL_MONO)
+    language="en",
+    format=stt.AudioFormats.WAV,
+    codec=stt.AudioCodecs.PCM,
+    bit_rate=stt.AudioBitRates.BITRATE_16,
+    sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
+    channel=stt.AudioChannels.CHANNEL_MONO,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -39,32 +47,48 @@ def _loopback():
 
 def tone(seconds, freq=800, amplitude=9000):
     count = int(16000 * seconds)
-    return struct.pack(f"<{count}h", *(round(amplitude * math.sin(2 * math.pi * freq * n / 16000)) for n in range(count)))
+    return struct.pack(
+        f"<{count}h",
+        *(
+            round(amplitude * math.sin(2 * math.pi * freq * n / 16000))
+            for n in range(count)
+        ),
+    )
 
 
 async def mic(data, size=640):
     for start in range(0, len(data), size):
-        yield data[start:start + size]
+        yield data[start : start + size]
         await asyncio.sleep(0)
 
 
 # --- conversions ------------------------------------------------------------------------------------------------------
 def test_mulaw_round_trip_stays_within_the_quantiser_step():
     for sample in range(-32000, 32000, 11):
-        decoded = struct.unpack("<h", call_audio.mulaw_to_pcm16le(call_audio.mulaw_encode([sample])))[0]
+        decoded = struct.unpack(
+            "<h", call_audio.mulaw_to_pcm16le(call_audio.mulaw_encode([sample]))
+        )[0]
         assert abs(decoded - sample) <= max(40, abs(sample) // 16), (sample, decoded)
 
 
 def test_known_mulaw_codes():
-    assert call_audio.mulaw_encode([0]) == b"\xff" and call_audio.mulaw_encode([-1]) == b"\x7f"
-    assert call_audio.mulaw_encode([32767]) == b"\x80" and call_audio.mulaw_encode([-32768]) == b"\x00"
+    assert (
+        call_audio.mulaw_encode([0]) == b"\xff"
+        and call_audio.mulaw_encode([-1]) == b"\x7f"
+    )
+    assert (
+        call_audio.mulaw_encode([32767]) == b"\x80"
+        and call_audio.mulaw_encode([-32768]) == b"\x00"
+    )
 
 
 def test_the_wav_header_describes_8khz_16bit_mono_of_unknown_length():
     header = call_audio.wav_header()
     assert header[:4] == b"RIFF" and header[8:16] == b"WAVEfmt " and len(header) == 44
     channels, rate, _, _, bits = struct.unpack("<HIIHH", header[22:36])
-    assert (channels, rate, bits) == (1, 8000, 16) and header[40:44] == b"\xff\xff\xff\xff"
+    assert (channels, rate, bits) == (1, 8000, 16) and header[
+        40:44
+    ] == b"\xff\xff\xff\xff"
 
 
 @pytest.mark.parametrize("sizes", [(640,), (1, 3, 7, 11, 2000), (2,) * 50])
@@ -75,14 +99,16 @@ def test_chunk_boundaries_do_not_change_the_downsampled_speech(sizes):
     for size in sizes * 400:
         if position >= len(data):
             break
-        parts += down.feed(data[position:position + size])
+        parts += down.feed(data[position : position + size])
         position += size
     assert parts + down.feed(data[position:]) == whole
 
 
 async def test_speech_becomes_paced_160_byte_frames_with_a_padded_last_one(monkeypatch):
     monkeypatch.setattr(call_audio, "FRAME_SECONDS", 0.0005)
-    frames = [frame async for frame in call_audio.speech_frames(mic(tone(0.5) + tone(0.011)))]
+    frames = [
+        frame async for frame in call_audio.speech_frames(mic(tone(0.5) + tone(0.011)))
+    ]
     assert len(frames) == 25 + 1 and all(len(frame) == 160 for frame in frames)
     assert frames[-1][-5:] == b"\xff" * 5
 
@@ -123,8 +149,15 @@ class FakeBridge:
         return None
 
     async def status(self, request):
-        return self._denied(request) or web.json_response({
-            "name": STATION_NAME, "connected": True, "serial": "S", "call_status": self.call, "broadcast": "idle"})
+        return self._denied(request) or web.json_response(
+            {
+                "name": STATION_NAME,
+                "connected": True,
+                "serial": "S",
+                "call_status": self.call,
+                "broadcast": "idle",
+            }
+        )
 
     async def talk(self, request):
         self.talk_requests += 1
@@ -156,7 +189,9 @@ class FakeBridge:
 async def bridge():
     fake = FakeBridge()
     await fake.start()
-    with patch("custom_components.hikvision_intercom.bridge_client.APP_PORT", fake.port):
+    with patch(
+        "custom_components.hikvision_intercom.bridge_client.APP_PORT", fake.port
+    ):
         yield fake
     await fake.stop()
 
@@ -164,7 +199,9 @@ async def bridge():
 @pytest.fixture
 def live(hass, bridge, supervisor, cloud):
     """The integration pointed at the fake bridge instead of the aiohttp mock."""
-    app = AppInfo("a1b2c3d4_hikvision_sdk", "127.0.0.1", True, {"token": TOKEN, "stations": []})
+    app = AppInfo(
+        "a1b2c3d4_hikvision_sdk", "127.0.0.1", True, {"token": TOKEN, "stations": []}
+    )
     with patch("custom_components.hikvision_intercom.chime.find_app", return_value=app):
         yield bridge
 
@@ -172,6 +209,7 @@ def live(hass, bridge, supervisor, cloud):
 # --- the bridge client ----------------------------------------------------------------------------------------------------
 async def test_talk_streams_the_frames_and_returns_the_count(hass, bridge):
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
     client = BridgeClient(async_get_clientsession(hass), "127.0.0.1", TOKEN)
 
     async def frames():
@@ -184,6 +222,7 @@ async def test_talk_streams_the_frames_and_returns_the_count(hass, bridge):
 
 async def test_talk_without_a_call_is_a_no_call_error(hass, bridge):
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
     bridge.call = "idle"
     client = BridgeClient(async_get_clientsession(hass), "127.0.0.1", TOKEN)
 
@@ -197,18 +236,24 @@ async def test_talk_without_a_call_is_a_no_call_error(hass, bridge):
 
 async def test_a_wrong_token_is_reported_without_echoing_it(hass, bridge):
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
-    client = BridgeClient(async_get_clientsession(hass), "127.0.0.1", "wrong-token-value")
+
+    client = BridgeClient(
+        async_get_clientsession(hass), "127.0.0.1", "wrong-token-value"
+    )
 
     async def frames():
         yield b"\xff" * 160
 
     with pytest.raises(BridgeError) as info:
         await client.talk(STATION_NAME, frames())
-    assert info.value.code == "app_unauthorized" and "wrong-token-value" not in repr(info.value)
+    assert info.value.code == "app_unauthorized" and "wrong-token-value" not in repr(
+        info.value
+    )
 
 
 async def test_listen_yields_door_audio_and_ends_when_the_call_does(hass, bridge):
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
     client = BridgeClient(async_get_clientsession(hass), "127.0.0.1", TOKEN)
     received = []
     async with client.listen(STATION_NAME) as chunks:
@@ -222,6 +267,7 @@ async def test_listen_yields_door_audio_and_ends_when_the_call_does(hass, bridge
 
 async def test_listen_without_a_call_is_a_no_call_error(hass, bridge):
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
     bridge.call = "idle"
     client = BridgeClient(async_get_clientsession(hass), "127.0.0.1", TOKEN)
     with pytest.raises(BridgeError) as info:
@@ -234,11 +280,17 @@ async def test_listen_without_a_call_is_a_no_call_error(hass, bridge):
 async def door_engine(hass, entry):
     await setup(hass, entry)
     registry = er.async_get(hass)
-    entity_id = next(e.entity_id for e in registry.entities.values() if e.platform == DOMAIN and e.domain == "stt")
+    entity_id = next(
+        e.entity_id
+        for e in registry.entities.values()
+        if e.platform == DOMAIN and e.domain == "stt"
+    )
     return stt.async_get_speech_to_text_entity(hass, entity_id)
 
 
-async def test_speaking_into_an_answered_call_sends_the_speech_to_the_door(hass, live, entry, monkeypatch):
+async def test_speaking_into_an_answered_call_sends_the_speech_to_the_door(
+    hass, live, entry, monkeypatch
+):
     monkeypatch.setattr(call_audio, "FRAME_SECONDS", 0.0005)
     engine = await door_engine(hass, entry)
     result = await engine.async_process_audio_stream(METADATA, mic(tone(0.5)))
@@ -246,7 +298,9 @@ async def test_speaking_into_an_answered_call_sends_the_speech_to_the_door(hass,
     assert len(b"".join(live.talked)) == 25 * 160
 
 
-async def test_without_a_call_nothing_is_sent_and_the_result_is_an_error(hass, live, entry, caplog):
+async def test_without_a_call_nothing_is_sent_and_the_result_is_an_error(
+    hass, live, entry, caplog
+):
     live.call = "idle"
     engine = await door_engine(hass, entry)
     result = await engine.async_process_audio_stream(METADATA, mic(tone(0.2)))
@@ -254,9 +308,13 @@ async def test_without_a_call_nothing_is_sent_and_the_result_is_an_error(hass, l
     assert live.talk_requests == 0 and "no_call" in caplog.text
 
 
-async def test_a_ringing_call_is_answered_first_then_spoken_into(hass, live, entry, cloud, monkeypatch):
+async def test_a_ringing_call_is_answered_first_then_spoken_into(
+    hass, live, entry, cloud, monkeypatch
+):
     monkeypatch.setattr(call_audio, "FRAME_SECONDS", 0.0005)
-    monkeypatch.setattr("custom_components.hikvision_intercom.door_call.asyncio.sleep", asyncio.sleep)
+    monkeypatch.setattr(
+        "custom_components.hikvision_intercom.door_call.asyncio.sleep", asyncio.sleep
+    )
     live.call = "ringing"
     engine = await door_engine(hass, entry)
 
@@ -264,21 +322,28 @@ async def test_a_ringing_call_is_answered_first_then_spoken_into(hass, live, ent
         await asyncio.sleep(0.2)
         live.call = "in_call"
 
-    asyncio.create_task(answered_soon())
+    answering = asyncio.create_task(answered_soon())
     result = await engine.async_process_audio_stream(METADATA, mic(tone(0.2)))
+    await answering
     assert result.result is stt.SpeechResultState.SUCCESS
     assert cloud.answered == ["DS-KH6320-WTE1TESTSERIAL"] and live.talk_requests == 1
 
 
-async def test_a_call_that_is_never_answered_is_not_spoken_into(hass, live, entry, cloud, monkeypatch):
-    monkeypatch.setattr("custom_components.hikvision_intercom.door_call.ANSWER_WAIT_SECONDS", 0.3)
+async def test_a_call_that_is_never_answered_is_not_spoken_into(
+    hass, live, entry, cloud, monkeypatch
+):
+    monkeypatch.setattr(
+        "custom_components.hikvision_intercom.door_call.ANSWER_WAIT_SECONDS", 0.3
+    )
     live.call = "ringing"
     engine = await door_engine(hass, entry)
     result = await engine.async_process_audio_stream(METADATA, mic(tone(0.2)))
     assert result.result is stt.SpeechResultState.ERROR and live.talk_requests == 0
 
 
-async def test_a_refused_answer_is_an_error_and_sends_nothing(hass, live, entry, cloud, caplog):
+async def test_a_refused_answer_is_an_error_and_sends_nothing(
+    hass, live, entry, cloud, caplog
+):
     live.call = "ringing"
     cloud.answer_error = HikConnectError("rejected (secret detail)")
     engine = await door_engine(hass, entry)
@@ -309,7 +374,9 @@ async def listen_url(hass, entry):
     return f"/api/hikvision_intercom/listen/{entry.entry_id}/{subentry_id}"
 
 
-async def test_the_listen_endpoint_streams_wav_to_an_administrator(hass, live, entry, hass_client):
+async def test_the_listen_endpoint_streams_wav_to_an_administrator(
+    hass, live, entry, hass_client
+):
     await setup(hass, entry)
     client = await hass_client()
     response = await client.get(await listen_url(hass, entry))
@@ -323,14 +390,18 @@ async def test_the_listen_endpoint_streams_wav_to_an_administrator(hass, live, e
     assert await response.content.read() == b""
 
 
-async def test_the_listen_endpoint_is_for_administrators_only(hass, live, entry, hass_client, hass_read_only_access_token):
+async def test_the_listen_endpoint_is_for_administrators_only(
+    hass, live, entry, hass_client, hass_read_only_access_token
+):
     await setup(hass, entry)
     client = await hass_client(hass_read_only_access_token)
     response = await client.get(await listen_url(hass, entry))
     assert response.status == 403 and live.listeners == []
 
 
-async def test_the_listen_endpoint_needs_a_login(hass, live, entry, hass_client_no_auth):
+async def test_the_listen_endpoint_needs_a_login(
+    hass, live, entry, hass_client_no_auth
+):
     await setup(hass, entry)
     client = await hass_client_no_auth()
     assert (await client.get(await listen_url(hass, entry))).status == 401
@@ -347,29 +418,61 @@ async def test_listening_without_a_call_answers_409(hass, live, entry, hass_clie
 async def test_an_unknown_station_is_404(hass, live, entry, hass_client):
     await setup(hass, entry)
     client = await hass_client()
-    assert (await client.get(f"/api/hikvision_intercom/listen/{entry.entry_id}/nope")).status == 404
+    assert (
+        await client.get(f"/api/hikvision_intercom/listen/{entry.entry_id}/nope")
+    ).status == 404
 
 
 # --- through Home Assistant's own Assist pipeline --------------------------------------------------------------------------------
-async def test_the_door_intercom_assistant_relays_speech_end_to_end(hass, live, entry, monkeypatch):
+async def test_the_door_intercom_assistant_relays_speech_end_to_end(
+    hass, live, entry, monkeypatch
+):
     monkeypatch.setattr(call_audio, "FRAME_SECONDS", 0.0005)
     await setup(hass, entry)
     assert await async_setup_component(hass, "assist_pipeline", {})
     registry = er.async_get(hass)
-    stt_id = next(e.entity_id for e in registry.entities.values() if e.platform == DOMAIN and e.domain == "stt")
-    conv_id = next(e.entity_id for e in registry.entities.values() if e.platform == DOMAIN and e.domain == "conversation")
-    pipeline = await hass.data[KEY_ASSIST_PIPELINE].pipeline_store.async_create_item({
-        "name": "Door intercom", "language": "en", "conversation_engine": conv_id, "conversation_language": "en",
-        "stt_engine": stt_id, "stt_language": "en", "tts_engine": None, "tts_language": None, "tts_voice": None,
-        "wake_word_entity": None, "wake_word_id": None})
+    stt_id = next(
+        e.entity_id
+        for e in registry.entities.values()
+        if e.platform == DOMAIN and e.domain == "stt"
+    )
+    conv_id = next(
+        e.entity_id
+        for e in registry.entities.values()
+        if e.platform == DOMAIN and e.domain == "conversation"
+    )
+    pipeline = await hass.data[KEY_ASSIST_PIPELINE].pipeline_store.async_create_item(
+        {
+            "name": "Door intercom",
+            "language": "en",
+            "conversation_engine": conv_id,
+            "conversation_language": "en",
+            "stt_engine": stt_id,
+            "stt_language": "en",
+            "tts_engine": None,
+            "tts_language": None,
+            "tts_voice": None,
+            "wake_word_entity": None,
+            "wake_word_id": None,
+        }
+    )
     events = []
     await assist_pipeline.async_pipeline_from_audio_stream(
-        hass, context=Context(), event_callback=events.append, stt_metadata=METADATA, stt_stream=mic(tone(0.5)),
-        pipeline_id=pipeline.id, end_stage=PipelineStage.INTENT)
+        hass,
+        context=Context(),
+        event_callback=events.append,
+        stt_metadata=METADATA,
+        stt_stream=mic(tone(0.5)),
+        pipeline_id=pipeline.id,
+        end_stage=PipelineStage.INTENT,
+    )
     errors = [e.data for e in events if e.type == PipelineEventType.ERROR]
     assert not errors, errors
     stt_end = next(e for e in events if e.type == PipelineEventType.STT_END)
     assert stt_end.data["stt_output"]["text"] == SENT_TEXT
     intent_end = next(e for e in events if e.type == PipelineEventType.INTENT_END)
-    assert intent_end.data["intent_output"]["response"]["speech"]["plain"]["speech"] == "Sent"
+    assert (
+        intent_end.data["intent_output"]["response"]["speech"]["plain"]["speech"]
+        == "Sent"
+    )
     assert len(b"".join(live.talked)) >= 24 * 160

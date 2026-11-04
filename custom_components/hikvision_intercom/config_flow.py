@@ -8,9 +8,9 @@ from typing import Any
 import probatio as vol
 from homeassistant.config_entries import (
     ConfigEntry,
-    ConfigSubentryData,
     ConfigFlow,
     ConfigFlowResult,
+    ConfigSubentryData,
     ConfigSubentryFlow,
     OptionsFlow,
     SubentryFlowResult,
@@ -34,7 +34,6 @@ from homeassistant.helpers.selector import (
 
 from .audio import AudioError
 from .bridge_app import configure_station, find_app
-
 from .const import (
     APP_REPOSITORY_URL,
     CALL_POLL_INTERVAL,
@@ -46,9 +45,9 @@ from .const import (
     CONF_SERVER,
     DEFAULT_BASE_URL,
     DEFAULT_GAIN,
-    DEFAULT_STATION_TITLE,
     DEFAULT_REPEATS,
     DEFAULT_SDK_PORT,
+    DEFAULT_STATION_TITLE,
     DOMAIN,
     MAX_CALL_POLL_INTERVAL,
     MIN_CALL_POLL_INTERVAL,
@@ -82,11 +81,17 @@ def _server_defaults(base_url: str) -> tuple[str, str]:
     return SERVER_CUSTOM, base_url or ""
 
 
-def _schema(account: str, server: str, base_url: str, password_optional: bool) -> vol.Schema:
-    options = [SelectOptionDict(value=u, label=l) for u, l in SERVERS.items()]
+def _schema(
+    account: str, server: str, base_url: str, password_optional: bool
+) -> vol.Schema:
+    options = [
+        SelectOptionDict(value=url, label=label) for url, label in SERVERS.items()
+    ]
     options.append(SelectOptionDict(value=SERVER_CUSTOM, label="Custom…"))
     password = (
-        vol.Optional(CONF_PASSWORD) if password_optional else vol.Required(CONF_PASSWORD)
+        vol.Optional(CONF_PASSWORD)
+        if password_optional
+        else vol.Required(CONF_PASSWORD)
     )
     return vol.Schema(
         {
@@ -101,7 +106,11 @@ def _schema(account: str, server: str, base_url: str, password_optional: bool) -
 
 
 def _port(value) -> int:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not float(value).is_integer():
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not float(value).is_integer()
+    ):
         raise SetupError("invalid_port")
     return int(value)
 
@@ -110,21 +119,27 @@ def _station_fields(title_default: str | None) -> dict:
     fields: dict = {}
     if title_default is not None:
         fields[vol.Required("title", default=title_default)] = TextSelector()
-    fields.update({
-        vol.Required("host"): TextSelector(),
-        vol.Required("port", default=DEFAULT_SDK_PORT): NumberSelector(
-            NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)),
-        vol.Required("username", default="admin"): TextSelector(),
-        vol.Required("password"): TextSelector(
-            TextSelectorConfig(type=TextSelectorType.PASSWORD)),
-    })
+    fields.update(
+        {
+            vol.Required("host"): TextSelector(),
+            vol.Required("port", default=DEFAULT_SDK_PORT): NumberSelector(
+                NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)
+            ),
+            vol.Required("username", default="admin"): TextSelector(),
+            vol.Required("password"): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            ),
+        }
+    )
     return fields
 
 
 def _checked_station(user_input: dict[str, Any]) -> dict[str, Any]:
     """Validate the station form and add the app-side name. Raises SetupError."""
     station = dict(user_input, port=_port(user_input["port"]))
-    validate_station(station["host"], station["port"], station["username"], station["password"])
+    validate_station(
+        station["host"], station["port"], station["username"], station["password"]
+    )
     station["name"] = station_name(station["host"])
     return station
 
@@ -194,7 +209,8 @@ class HikConnectLocalConfigFlow(ConfigFlow, domain=DOMAIN):
                 "repository_url": APP_REPOSITORY_URL,
                 "add_repository_link": (
                     "https://my.home-assistant.io/redirect/supervisor_add_addon_repository/"
-                    f"?repository_url={APP_REPOSITORY_URL}"),
+                    f"?repository_url={APP_REPOSITORY_URL}"
+                ),
             },
         )
 
@@ -214,7 +230,7 @@ class HikConnectLocalConfigFlow(ConfigFlow, domain=DOMAIN):
                     await self.hass.async_add_executor_job(client.login)
                 except HikConnectAuthError:
                     errors["base"] = "invalid_auth"
-                except Exception:  # noqa: BLE001
+                except Exception:
                     errors["base"] = "cannot_connect"
                 else:
                     await self.async_set_unique_id(user_input[CONF_ACCOUNT].lower())
@@ -278,15 +294,21 @@ class HikConnectLocalConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(
                     title=account[CONF_ACCOUNT],
                     data=account,
-                    subentries=[ConfigSubentryData(
-                        subentry_type=SUBENTRY_STATION, title=DEFAULT_STATION_TITLE,
-                        unique_id=unique_id, data=data)],
+                    subentries=[
+                        ConfigSubentryData(
+                            subentry_type=SUBENTRY_STATION,
+                            title=DEFAULT_STATION_TITLE,
+                            unique_id=unique_id,
+                            data=data,
+                        )
+                    ],
                 )
         return self.async_show_form(
             step_id="confirm",
             errors=errors,
-            data_schema=vol.Schema({
-                vol.Required("confirm_restart", default=False): BooleanSelector()}),
+            data_schema=vol.Schema(
+                {vol.Required("confirm_restart", default=False): BooleanSelector()}
+            ),
         )
 
     async def async_step_reconfigure(
@@ -302,14 +324,12 @@ class HikConnectLocalConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 # blank password keeps the existing one
                 password = user_input.get(CONF_PASSWORD) or entry.data[CONF_PASSWORD]
-                client = HikConnectClient(
-                    user_input[CONF_ACCOUNT], password, base_url
-                )
+                client = HikConnectClient(user_input[CONF_ACCOUNT], password, base_url)
                 try:
                     await self.hass.async_add_executor_job(client.login)
                 except HikConnectAuthError:
                     errors["base"] = "invalid_auth"
-                except Exception:  # noqa: BLE001
+                except Exception:
                     errors["base"] = "cannot_connect"
                 else:
                     await self.async_set_unique_id(user_input[CONF_ACCOUNT].lower())
@@ -328,7 +348,9 @@ class HikConnectLocalConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=_schema(
-                entry.data.get(CONF_ACCOUNT, ""), server, base_url,
+                entry.data.get(CONF_ACCOUNT, ""),
+                server,
+                base_url,
                 password_optional=True,
             ),
             errors=errors,
@@ -348,13 +370,17 @@ class HikConnectOptionsFlow(OptionsFlow):
                     CONF_NATIVE_STREAM: user_input[CONF_NATIVE_STREAM],
                 }
             )
-        current = self.config_entry.options.get(CONF_CALL_POLL_INTERVAL, CALL_POLL_INTERVAL)
+        current = self.config_entry.options.get(
+            CONF_CALL_POLL_INTERVAL, CALL_POLL_INTERVAL
+        )
         native = native_stream_mode(self.config_entry.options)
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_CALL_POLL_INTERVAL, default=current): NumberSelector(
+                    vol.Required(
+                        CONF_CALL_POLL_INTERVAL, default=current
+                    ): NumberSelector(
                         NumberSelectorConfig(
                             min=MIN_CALL_POLL_INTERVAL,
                             max=MAX_CALL_POLL_INTERVAL,
@@ -380,12 +406,15 @@ class StationSubentryFlow(ConfigSubentryFlow):
 
     _pending: dict | None = None
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
         try:
             await find_app(self.hass)
         except SetupError as error:
             return self.async_show_form(
-                step_id="user", data_schema=vol.Schema({}), errors={"base": str(error)})
+                step_id="user", data_schema=vol.Schema({}), errors={"base": str(error)}
+            )
         return await self.async_step_connection()
 
     async def async_step_connection(
@@ -396,7 +425,10 @@ class StationSubentryFlow(ConfigSubentryFlow):
             try:
                 station = _checked_station(user_input)
                 unique_id = _station_unique_id(station)
-                if any(sub.unique_id == unique_id for sub in self._get_entry().subentries.values()):
+                if any(
+                    sub.unique_id == unique_id
+                    for sub in self._get_entry().subentries.values()
+                ):
                     return self.async_abort(reason="already_configured")
                 self._pending = station
                 return await self.async_step_confirm()
@@ -425,18 +457,22 @@ class StationSubentryFlow(ConfigSubentryFlow):
                     errors["base"] = str(error)
                 else:
                     return self.async_create_entry(
-                        title=station["title"], data=_station_data(station),
-                        unique_id=_station_unique_id(station))
+                        title=station["title"],
+                        data=_station_data(station),
+                        unique_id=_station_unique_id(station),
+                    )
                 finally:
                     station.pop("password", None)
                     self._pending = None
                 return self.async_show_form(
-                    step_id="user", data_schema=vol.Schema({}), errors=errors)
+                    step_id="user", data_schema=vol.Schema({}), errors=errors
+                )
         return self.async_show_form(
             step_id="confirm",
             errors=errors,
-            data_schema=vol.Schema({
-                vol.Required("confirm_restart", default=False): BooleanSelector()}),
+            data_schema=vol.Schema(
+                {vol.Required("confirm_restart", default=False): BooleanSelector()}
+            ),
         )
 
     async def async_step_reconfigure(
@@ -445,18 +481,28 @@ class StationSubentryFlow(ConfigSubentryFlow):
         entry, subentry = self._get_entry(), self._get_reconfigure_subentry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            runtime = (self.hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-                       .get("chimes", {}).get(subentry.subentry_id))
+            runtime = (
+                self.hass.data.get(DOMAIN, {})
+                .get(entry.entry_id, {})
+                .get("chimes", {})
+                .get(subentry.subentry_id)
+            )
             if runtime is None:
                 errors["base"] = "integration_not_ready"
             else:
                 try:
                     repeats = user_input["repeats"]
-                    if isinstance(repeats, bool) or not isinstance(repeats, (int, float)) \
-                            or not float(repeats).is_integer():
+                    if (
+                        isinstance(repeats, bool)
+                        or not isinstance(repeats, (int, float))
+                        or not float(repeats).is_integer()
+                    ):
                         raise AudioError("invalid_repeats")
                     data = await runtime.async_settings_data(
-                        user_input["gain_db"], int(repeats), user_input.get("audio_file"))
+                        user_input["gain_db"],
+                        int(repeats),
+                        user_input.get("audio_file"),
+                    )
                     return self.async_update_and_abort(entry, subentry, data=data)
                 except AudioError as error:
                     errors["base"] = str(error)
@@ -465,15 +511,29 @@ class StationSubentryFlow(ConfigSubentryFlow):
         return self.async_show_form(
             step_id="reconfigure",
             errors=errors,
-            data_schema=vol.Schema({
-                vol.Optional("audio_file"): FileSelector(
-                    FileSelectorConfig(accept=".wav,audio/wav")),
-                vol.Required("gain_db", default=subentry.data.get("gain_db", DEFAULT_GAIN)):
-                    NumberSelector(NumberSelectorConfig(
-                        min=-30, max=30, step=1, unit_of_measurement="dB",
-                        mode=NumberSelectorMode.BOX)),
-                vol.Required("repeats", default=subentry.data.get("repeats", DEFAULT_REPEATS)):
-                    NumberSelector(NumberSelectorConfig(
-                        min=1, max=10, step=1, mode=NumberSelectorMode.BOX)),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Optional("audio_file"): FileSelector(
+                        FileSelectorConfig(accept=".wav,audio/wav")
+                    ),
+                    vol.Required(
+                        "gain_db", default=subentry.data.get("gain_db", DEFAULT_GAIN)
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=-30,
+                            max=30,
+                            step=1,
+                            unit_of_measurement="dB",
+                            mode=NumberSelectorMode.BOX,
+                        )
+                    ),
+                    vol.Required(
+                        "repeats", default=subentry.data.get("repeats", DEFAULT_REPEATS)
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=1, max=10, step=1, mode=NumberSelectorMode.BOX
+                        )
+                    ),
+                }
+            ),
         )

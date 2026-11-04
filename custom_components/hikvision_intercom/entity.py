@@ -41,7 +41,9 @@ class ChimeEntity(CoordinatorEntity):
     @property
     def available(self) -> bool:
         # Playback needs a reachable bridge app and a logged-in station.
-        return super().available and bool((self.coordinator.data or {}).get("connected"))
+        return super().available and bool(
+            (self.coordinator.data or {}).get("connected")
+        )
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

@@ -40,10 +40,6 @@ class HikStreamDecoder:
                 raise ValueError("Unsupported video encryption key length")
             self._aes = AES.new(key.ljust(16, b"\0"), AES.MODE_ECB)
 
-    @property
-    def keys_derived(self) -> bool:
-        return not self.requires_key or self._aes is not None
-
     def feed(self, data: bytes) -> None:
         self._buf.extend(data)
         while True:
@@ -61,11 +57,6 @@ class HikStreamDecoder:
             packet = bytes(self._buf[4 : n + 4])
             del self._buf[: n + 4]
             self._handle_packet(packet)
-
-    def take(self) -> bytes:
-        out = bytes(self._out)
-        self._out.clear()
-        return out
 
     def take_units(self) -> list[tuple[int, bytes]]:
         """Complete access units as (90 kHz RTP timestamp, Annex-B bytes)."""

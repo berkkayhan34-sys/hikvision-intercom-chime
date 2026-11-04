@@ -52,11 +52,15 @@ def native_stream_mode(options) -> str:
         return NATIVE_STREAM_H264 if mode else NATIVE_STREAM_OFF
     return mode if mode in NATIVE_STREAM_CODECS else NATIVE_STREAM_H264
 
+
 # Device telemetry (online, wifi, firmware, disk) changes slowly — poll gently.
 STATUS_POLL_INTERVAL = 60
 
-CALL_STATUS_MAPPING = {1: "idle", 2: "ringing", 3: "call in progress"}
-CALL_STATES = ["idle", "ringing", "call in progress"]  # "unknown" -> None (reserved state)
+CALL_STATES = [
+    "idle",
+    "ringing",
+    "call in progress",
+]  # "unknown" -> None (reserved state)
 
 # Realtime push (EZVIZ MQTT backend, shared by Hik-Connect). A push event is
 # only used as a trigger to immediately re-poll the authoritative call status,
@@ -73,7 +77,9 @@ def call_signal(serial: str) -> str:
 SUBENTRY_STATION = "station"
 DEFAULT_STATION_TITLE = "Doorbell chime"
 APP_REPOSITORY_URL = "https://github.com/berkkayhan34-sys/hikvision-intercom-chime"
-APP_SLUG_SUFFIX = "hikvision_sdk"  # repository slug prefix varies; local installs use "local"
+APP_SLUG_SUFFIX = (
+    "hikvision_sdk"  # repository slug prefix varies; local installs use "local"
+)
 APP_PORT = 8099
 DEFAULT_SDK_PORT = 8000
 CHIME_POLL_INTERVAL = 10

@@ -3,7 +3,6 @@ import math
 import struct
 import unittest
 import wave
-
 from pathlib import Path
 
 from custom_components.hikvision_intercom import audio
@@ -15,7 +14,9 @@ def wav(pcm=None, *, channels=1, width=2, rate=8000):
     output = io.BytesIO()
     with wave.open(output, "wb") as target:
         target.setparams((channels, width, rate, 0, "NONE", "not compressed"))
-        target.writeframes(pcm if pcm is not None else struct.pack("<hhhh", 0, 1200, -2400, 32767))
+        target.writeframes(
+            pcm if pcm is not None else struct.pack("<hhhh", 0, 1200, -2400, 32767)
+        )
     return output.getvalue()
 
 
@@ -49,8 +50,15 @@ class AudioTests(unittest.TestCase):
         self.assertEqual(struct.unpack("<h", pcm)[0], 1000)
 
     def test_rejects_malformed_unsupported_and_oversized_inputs(self):
-        cases = [b"", b"not a wav" * 10, b"x" * 1048577,
-                 wav(channels=2), wav(width=1), wav(rate=44100), wav(pcm=b"")]
+        cases = [
+            b"",
+            b"not a wav" * 10,
+            b"x" * 1048577,
+            wav(channels=2),
+            wav(width=1),
+            wav(rate=44100),
+            wav(pcm=b""),
+        ]
         for data in cases:
             with self.subTest(length=len(data)):
                 with self.assertRaises(audio.AudioError):
@@ -72,10 +80,12 @@ class AudioTests(unittest.TestCase):
     def test_settings_refuse_bool_nan_and_non_integral_repeats(self):
         for gain in (True, math.nan, math.inf, -31, 31, "3"):
             with self.subTest(gain=gain):
-                with self.assertRaises(audio.AudioError): audio.Settings(gain, 4)
+                with self.assertRaises(audio.AudioError):
+                    audio.Settings(gain, 4)
         for repeats in (True, 0, 11, 1.2, "2"):
             with self.subTest(repeats=repeats):
-                with self.assertRaises(audio.AudioError): audio.Settings(0, repeats)
+                with self.assertRaises(audio.AudioError):
+                    audio.Settings(0, repeats)
 
 
 class RenderContractTests(unittest.TestCase):

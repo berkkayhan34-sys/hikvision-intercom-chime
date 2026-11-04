@@ -7,10 +7,11 @@ Nothing here plays sound on startup, reload or settings changes; only
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
-from datetime import timedelta
+import contextlib
 import logging
 import math
+from collections.abc import Callable
+from datetime import timedelta
 from pathlib import Path
 
 from homeassistant.components.file_upload import process_uploaded_file
@@ -58,7 +59,9 @@ class AppLink:
         token = app.options.get("token")
         if not isinstance(token, str) or not token:
             raise BridgeError("app_unconfigured")
-        self._client = BridgeClient(async_get_clientsession(self._hass), app.hostname, token)
+        self._client = BridgeClient(
+            async_get_clientsession(self._hass), app.hostname, token
+        )
         return self._client
 
     async def client(self) -> BridgeClient:
@@ -81,8 +84,15 @@ class AppLink:
 
 
 class ChimeRuntime:
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, subentry: ConfigSubentry,
-                 link: AppLink, store: AudioStore, device_serial: str | None = None) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        subentry: ConfigSubentry,
+        link: AppLink,
+        store: AudioStore,
+        device_serial: str | None = None,
+    ) -> None:
         self.hass, self.entry, self.link, self.store = hass, entry, link, store
         # Serial of the cloud device this chime shares, or None for a device of its own.
         self.device_serial = device_serial
@@ -96,9 +106,13 @@ class ChimeRuntime:
         self._finished.set()
         self._listeners: set[Callable[[], None]] = set()
         self.coordinator = DataUpdateCoordinator(
-            hass, _LOGGER, config_entry=entry, name=f"{DOMAIN}_{self.subentry_id}",
+            hass,
+            _LOGGER,
+            config_entry=entry,
+            name=f"{DOMAIN}_{self.subentry_id}",
             update_method=self._async_poll,
-            update_interval=timedelta(seconds=CHIME_POLL_INTERVAL))
+            update_interval=timedelta(seconds=CHIME_POLL_INTERVAL),
+        )
 
     # -- state -------------------------------------------------------------
     @property
@@ -109,7 +123,9 @@ class ChimeRuntime:
     @property
     def settings(self) -> Settings:
         data = self.subentry.data
-        return Settings(data.get("gain_db", DEFAULT_GAIN), data.get("repeats", DEFAULT_REPEATS))
+        return Settings(
+            data.get("gain_db", DEFAULT_GAIN), data.get("repeats", DEFAULT_REPEATS)
+        )
 
     def listen(self, callback: Callable[[], None]) -> Callable[[], None]:
         self._listeners.add(callback)
@@ -124,7 +140,8 @@ class ChimeRuntime:
             return await self.link.call(lambda client: client.status(self.station_name))
         except BridgeError as error:
             raise UpdateFailed(
-                translation_domain=DOMAIN, translation_key=error.code) from None
+                translation_domain=DOMAIN, translation_key=error.code
+            ) from None
 
     # -- audio source and settings -------------------------------------------
     def _source(self, data=None) -> bytes:
@@ -135,10 +152,13 @@ class ChimeRuntime:
 
     async def async_validate(self) -> None:
         source = await self.hass.async_add_executor_job(self._source)
-        await self.hass.async_add_executor_job(render, decode_wav(source), self.settings)
+        await self.hass.async_add_executor_job(
+            render, decode_wav(source), self.settings
+        )
 
-    async def async_settings_data(self, gain: float, repeats: int,
-                                  upload_id: str | None = None) -> dict:
+    async def async_settings_data(
+        self, gain: float, repeats: int, upload_id: str | None = None
+    ) -> dict:
         """Validate, then return new subentry data. Never contacts the app or plays."""
         if self._lock.locked():
             raise AudioError("busy")
@@ -146,34 +166,47 @@ class ChimeRuntime:
             settings = Settings(gain, repeats)
             data = dict(self.subentry.data)
             if upload_id:
+
                 def import_upload():
                     with process_uploaded_file(self.hass, upload_id) as path:
                         source = AudioStore.read_file(path)
                         render(decode_wav(source), settings)
                         return self.store.add_source(source)
-                data["source_digest"] = await self.hass.async_add_executor_job(import_upload)
+
+                data["source_digest"] = await self.hass.async_add_executor_job(
+                    import_upload
+                )
             else:
                 source = await self.hass.async_add_executor_job(self._source, data)
-                await self.hass.async_add_executor_job(render, decode_wav(source), settings)
+                await self.hass.async_add_executor_job(
+                    render, decode_wav(source), settings
+                )
             data.update(gain_db=settings.gain_db, repeats=settings.repeats)
             return data
 
     async def async_set_number(self, key: str, value: float) -> None:
         if key not in ("gain_db", "repeats"):
             raise ChimeError("invalid_gain")
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
             raise ChimeError("invalid_repeats" if key == "repeats" else "invalid_gain")
         if key == "repeats" and not float(value).is_integer():
             raise ChimeError("invalid_repeats")
         try:
             data = await self.async_settings_data(
                 value if key == "gain_db" else self.settings.gain_db,
-                int(value) if key == "repeats" else self.settings.repeats)
+                int(value) if key == "repeats" else self.settings.repeats,
+            )
         except AudioError as error:
             raise ChimeError(str(error)) from None
         except OSError:
             raise ChimeError("storage_unavailable") from None
-        self.hass.config_entries.async_update_subentry(self.entry, self.subentry, data=data)
+        self.hass.config_entries.async_update_subentry(
+            self.entry, self.subentry, data=data
+        )
         self.notify()
 
     # -- playback ------------------------------------------------------------
@@ -188,21 +221,26 @@ class ChimeRuntime:
             try:
                 settings = self.settings
                 source = await self.hass.async_add_executor_job(self._source)
-                pcm = await self.hass.async_add_executor_job(render, decode_wav(source), settings)
+                pcm = await self.hass.async_add_executor_job(
+                    render, decode_wav(source), settings
+                )
                 if self._stop.is_set():
                     return  # Stop was pressed while the sound was being prepared
                 duration = await self.link.call(
-                    lambda client: client.broadcast(self.station_name, pcm))
+                    lambda client: client.broadcast(self.station_name, pcm)
+                )
                 started = True
                 self.status, self.last_error = "sending", None
                 self.notify()
-                try:
-                    await asyncio.wait_for(self._stop.wait(), duration + COMPLETION_MARGIN)
-                except TimeoutError:
-                    pass
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(
+                        self._stop.wait(), duration + COMPLETION_MARGIN
+                    )
             except (AudioError, BridgeError) as error:
                 failed = True
-                self.last_error = error.code if isinstance(error, BridgeError) else str(error)
+                self.last_error = (
+                    error.code if isinstance(error, BridgeError) else str(error)
+                )
                 raise ChimeError(self.last_error) from None
             except asyncio.CancelledError:
                 raise
@@ -214,8 +252,12 @@ class ChimeRuntime:
                 if started:
                     try:
                         # Stops only this bridge's own broadcast; a no-op once playback ended.
-                        await asyncio.wait_for(self.link.call(
-                            lambda client: client.stop(self.station_name)), 10)
+                        await asyncio.wait_for(
+                            self.link.call(
+                                lambda client: client.stop(self.station_name)
+                            ),
+                            10,
+                        )
                     except Exception:
                         self.last_error = "stop_request_failed"
                         failed = True

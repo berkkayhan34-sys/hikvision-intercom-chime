@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import os
-from pathlib import Path
 import re
 import stat
 import tempfile
+from pathlib import Path
 
 from .audio import AudioError, decode_wav
 from .const import MAX_FILE_BYTES, MAX_SOURCES
@@ -82,9 +82,9 @@ class AudioStore:
         if self.directory.is_symlink():
             raise AudioError("unsafe_storage")
         for path in self.directory.iterdir():
-            if path.suffix == ".wav" and _DIGEST.fullmatch(path.stem):
-                if path.is_file() and not path.is_symlink():
-                    path.unlink()
+            owned = path.suffix == ".wav" and _DIGEST.fullmatch(path.stem)
+            if owned and path.is_file() and not path.is_symlink():
+                path.unlink()
         # Unknown files are preserved; never recursively delete an arbitrary tree.
         if not any(self.directory.iterdir()):
             self.directory.rmdir()

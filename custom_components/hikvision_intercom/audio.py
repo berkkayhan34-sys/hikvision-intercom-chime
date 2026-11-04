@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import io
 import math
 import struct
 import wave
+from dataclasses import dataclass
 
 from .const import (
-    MAX_FILE_BYTES, MAX_SOURCE_SECONDS, MAX_TOTAL_SECONDS, PEAK, SAMPLE_RATE,
+    MAX_FILE_BYTES,
+    MAX_SOURCE_SECONDS,
+    MAX_TOTAL_SECONDS,
+    PEAK,
+    SAMPLE_RATE,
 )
 
 
@@ -23,14 +27,18 @@ class Settings:
     repeats: int = 4
 
     def __post_init__(self) -> None:
-        if (isinstance(self.gain_db, bool)
-                or not isinstance(self.gain_db, (int, float))
-                or not math.isfinite(self.gain_db)
-                or not -30 <= self.gain_db <= 30):
+        if (
+            isinstance(self.gain_db, bool)
+            or not isinstance(self.gain_db, (int, float))
+            or not math.isfinite(self.gain_db)
+            or not -30 <= self.gain_db <= 30
+        ):
             raise AudioError("invalid_gain")
-        if (isinstance(self.repeats, bool)
-                or not isinstance(self.repeats, int)
-                or not 1 <= self.repeats <= 10):
+        if (
+            isinstance(self.repeats, bool)
+            or not isinstance(self.repeats, int)
+            or not 1 <= self.repeats <= 10
+        ):
             raise AudioError("invalid_repeats")
 
 
@@ -51,9 +59,12 @@ def decode_wav(data: bytes) -> Audio:
         raise AudioError("invalid_wav")
     try:
         with wave.open(io.BytesIO(data), "rb") as source:
-            if (source.getnchannels() != 1 or source.getsampwidth() != 2
-                    or source.getframerate() != SAMPLE_RATE
-                    or source.getcomptype() != "NONE"):
+            if (
+                source.getnchannels() != 1
+                or source.getsampwidth() != 2
+                or source.getframerate() != SAMPLE_RATE
+                or source.getcomptype() != "NONE"
+            ):
                 raise AudioError("unsupported_wav")
             frames = source.getnframes()
             if not 0 < frames <= MAX_SOURCE_SECONDS * SAMPLE_RATE:
@@ -79,7 +90,9 @@ def render(audio: Audio, settings: Settings) -> bytes:
     pcm = audio.pcm
     if settings.gain_db:
         scale = 10 ** (settings.gain_db / 20)
-        samples = (max(-PEAK, min(PEAK, round(value * scale)))
-                   for (value,) in struct.iter_unpack("<h", pcm))
+        samples = (
+            max(-PEAK, min(PEAK, round(value * scale)))
+            for (value,) in struct.iter_unpack("<h", pcm)
+        )
         pcm = b"".join(struct.pack("<h", value) for value in samples)
     return pcm * settings.repeats

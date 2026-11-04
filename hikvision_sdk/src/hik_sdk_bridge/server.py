@@ -16,20 +16,27 @@ Errors are {"error": <code>}. Everything except /v1/health needs
 
 from __future__ import annotations
 
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hmac
 import json
 import logging
 import re
 import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import __version__
 from .station import MAX_PCM_BYTES, Station, StationError
 
 _LOGGER = logging.getLogger(__name__)
-_STATUS = {"invalid_audio": 400, "busy": 409, "call_active": 409, "no_call": 409, "station_offline": 503}
+_STATUS = {
+    "invalid_audio": 400,
+    "busy": 409,
+    "call_active": 409,
+    "no_call": 409,
+    "station_offline": 503,
+}
 _STATION_PATH = re.compile(
-    r"/v1/stations/([a-z0-9][a-z0-9_-]{0,63})(/broadcast|/call/talk|/call/listen|/call)?\Z")
+    r"/v1/stations/([a-z0-9][a-z0-9_-]{0,63})(/broadcast|/call/talk|/call/listen|/call)?\Z"
+)
 MAX_TALK_BYTES = 8000 * 600  # ten minutes of 8 kHz mu-law
 MAX_CHUNK_BYTES = 64 * 1024
 
@@ -46,7 +53,9 @@ class BridgeServer(ThreadingHTTPServer):
     def handle_error(self, request, client_address) -> None:
         # A client that drops a connection (a listener closing its page) is routine, not an error worth a traceback.
         if isinstance(sys.exc_info()[1], (ConnectionError, TimeoutError)):
-            _LOGGER.debug("client connection ended: %s", sys.exc_info()[1].__class__.__name__)
+            _LOGGER.debug(
+                "client connection ended: %s", sys.exc_info()[1].__class__.__name__
+            )
             return
         super().handle_error(request, client_address)
 
@@ -57,7 +66,7 @@ class Handler(BaseHTTPRequestHandler):
 
     server: BridgeServer
 
-    def log_message(self, format, *args) -> None:  # noqa: A002 - stdlib signature
+    def log_message(self, format, *args) -> None:
         _LOGGER.debug("%s %s", self.command, self.path.split("?", 1)[0])
 
     def _send(self, status: int, payload: dict) -> None:
@@ -75,7 +84,8 @@ class Handler(BaseHTTPRequestHandler):
         header = self.headers.get("Authorization", "")
         scheme, _, presented = header.partition(" ")
         return scheme == "Bearer" and hmac.compare_digest(
-            presented.encode("utf8"), self.server.token)
+            presented.encode("utf8"), self.server.token
+        )
 
     def _route(self):
         """Return (station, suffix) or None after sending the error."""

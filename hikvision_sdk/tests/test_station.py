@@ -2,12 +2,11 @@ import threading
 import time
 
 import pytest
+from fakes import FakeSdk
 
 from hik_sdk_bridge import station as station_module
 from hik_sdk_bridge.config import StationConfig
 from hik_sdk_bridge.station import FRAME_BYTES, Station, StationError
-
-from fakes import FakeSdk
 
 PCM = b"\x10\x00" * (FRAME_BYTES * 5 + 30)  # 5.19 frames of mu-law
 
@@ -29,10 +28,15 @@ def wait_idle(station, timeout=3):
 
 
 def test_status_when_connected():
-    station, sdk = make()
-    assert station.status() == {"name": "hall", "connected": True, "serial": "SERIAL123",
-                                "call_status": "idle", "broadcast": "idle",
-                                "call_audio": "idle"}
+    station, _sdk = make()
+    assert station.status() == {
+        "name": "hall",
+        "connected": True,
+        "serial": "SERIAL123",
+        "call_status": "idle",
+        "broadcast": "idle",
+        "call_audio": "idle",
+    }
 
 
 def test_status_when_login_fails_does_not_raise():
@@ -95,8 +99,15 @@ def test_voice_start_failure_drops_session_and_reports_offline():
     assert sdk.logouts == [7]
 
 
-@pytest.mark.parametrize("pcm", [b"", b"\x00" * 100, b"\x00" * (FRAME_BYTES * 2 + 1),
-                                  b"\x00" * (station_module.MAX_PCM_BYTES + 2)])
+@pytest.mark.parametrize(
+    "pcm",
+    [
+        b"",
+        b"\x00" * 100,
+        b"\x00" * (FRAME_BYTES * 2 + 1),
+        b"\x00" * (station_module.MAX_PCM_BYTES + 2),
+    ],
+)
 def test_invalid_audio_is_rejected_before_touching_the_device(pcm):
     station, sdk = make()
     with pytest.raises(StationError) as error:
@@ -277,7 +288,9 @@ def test_talking_and_listening_share_one_channel_that_closes_with_the_last_user(
     station, sdk = make(in_call(FakeSdk()))
     listener = station.listen()
     station.talk([FRAME])
-    assert sdk.voice_started == 1 and sdk.voice_stopped == []  # the listener keeps it open
+    assert (
+        sdk.voice_started == 1 and sdk.voice_stopped == []
+    )  # the listener keeps it open
     listener.close()
     assert sdk.voice_stopped == [99]
 

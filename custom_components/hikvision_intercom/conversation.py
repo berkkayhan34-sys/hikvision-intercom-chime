@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
-from homeassistant.components.conversation import ConversationEntity, ConversationInput, ConversationResult
+from homeassistant.components.conversation import (
+    ConversationEntity,
+    ConversationInput,
+    ConversationResult,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-
 REPLY = "Sent"
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
     async_add_entities([CallAcknowledge(entry)])
 
 
@@ -32,4 +39,6 @@ class CallAcknowledge(ConversationEntity):
     async def async_process(self, user_input: ConversationInput) -> ConversationResult:
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_speech(REPLY)
-        return ConversationResult(response=response, conversation_id=user_input.conversation_id)
+        return ConversationResult(
+            response=response, conversation_id=user_input.conversation_id
+        )
