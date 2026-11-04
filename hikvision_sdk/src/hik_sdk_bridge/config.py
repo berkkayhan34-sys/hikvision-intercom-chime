@@ -49,7 +49,7 @@ def parse_station(raw: dict) -> StationConfig:
         raise ConfigError("invalid station name")
     try:
         address = ipaddress.IPv4Address(raw.get("host"))
-    except ipaddress.AddressValueError, TypeError:
+    except (ipaddress.AddressValueError, TypeError):
         raise ConfigError("invalid station host") from None
     if not any(address in ipaddress.IPv4Network(net) for net in _PRIVATE):
         raise ConfigError("station host must be a private LAN address")
@@ -78,7 +78,7 @@ def parse(raw: dict) -> Config:
 def load(path: Path = OPTIONS_PATH) -> Config:
     try:
         raw = json.loads(path.read_text("utf8"))
-    except OSError, ValueError:
+    except (OSError, ValueError):
         raise ConfigError("options file unreadable") from None
     if not isinstance(raw, dict):
         raise ConfigError("options file malformed")

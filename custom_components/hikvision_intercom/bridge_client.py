@@ -49,7 +49,7 @@ class BridgeClient:
                 ) as response:
                     payload = await response.json(content_type=None)
                     status = response.status
-        except aiohttp.ClientError, TimeoutError, ValueError:
+        except (aiohttp.ClientError, TimeoutError, ValueError):
             raise BridgeError("app_unreachable") from None
         if status < 300:
             return payload
@@ -80,7 +80,7 @@ class BridgeClient:
             ) as response:
                 payload = await response.json(content_type=None)
                 status = response.status
-        except aiohttp.ClientError, TimeoutError, ValueError:
+        except (aiohttp.ClientError, TimeoutError, ValueError):
             raise BridgeError("app_unreachable") from None
         if status < 300:
             return int(payload["frames"])
@@ -98,7 +98,7 @@ class BridgeClient:
                 headers=self._headers,
                 timeout=aiohttp.ClientTimeout(total=None, sock_connect=5, sock_read=30),
             )
-        except aiohttp.ClientError, TimeoutError:
+        except (aiohttp.ClientError, TimeoutError):
             raise BridgeError("app_unreachable") from None
         try:
             if response.status == 409:

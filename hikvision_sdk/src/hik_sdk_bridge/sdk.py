@@ -203,7 +203,7 @@ class Sdk:
         try:
             raw = json.loads(self._isapi_get(user_id, _CALL_STATUS_PATH))
             state = str(raw["CallStatus"]["status"]).lower()
-        except ValueError, KeyError, TypeError:
+        except (ValueError, KeyError, TypeError):
             return "unknown"
         if state == "idle":
             return "idle"

@@ -218,7 +218,7 @@ class Station:
             try:
                 listener.get_nowait()
                 listener.put_nowait(item)
-            except queue.Empty, queue.Full:
+            except (queue.Empty, queue.Full):
                 pass
 
     def _on_door_audio(self, data: bytes) -> None:

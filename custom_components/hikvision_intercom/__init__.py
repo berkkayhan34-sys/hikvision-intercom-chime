@@ -410,7 +410,7 @@ async def _async_create_chimes(
             store = await hass.async_add_executor_job(
                 AudioStore, _audio_root(hass), subentry.subentry_id
             )
-        except AudioError, OSError:
+        except (AudioError, OSError):
             _LOGGER.error(
                 "Audio storage for station %s is unusable; chime disabled",
                 subentry.title,

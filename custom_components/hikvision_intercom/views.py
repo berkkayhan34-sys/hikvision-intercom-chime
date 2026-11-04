@@ -50,7 +50,7 @@ class DoorListenView(HomeAssistantView):
             return web.json_response(
                 {"error": error.code}, status=_STATUS.get(error.code, 502)
             )
-        except ConnectionResetError, asyncio.CancelledError:
+        except (ConnectionResetError, asyncio.CancelledError):
             raise
         except Exception:
             _LOGGER.debug("listen stream ended", exc_info=True)

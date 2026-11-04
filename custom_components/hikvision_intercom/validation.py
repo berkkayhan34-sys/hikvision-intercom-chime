@@ -21,7 +21,7 @@ _PRIVATE_NETWORKS = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
 def validate_station(host: str, port: int, username: str, password: str) -> None:
     try:
         address = ipaddress.IPv4Address(host)
-    except ipaddress.AddressValueError, TypeError:
+    except (ipaddress.AddressValueError, TypeError):
         raise SetupError("invalid_host") from None
     if not any(
         address in ipaddress.IPv4Network(network) for network in _PRIVATE_NETWORKS

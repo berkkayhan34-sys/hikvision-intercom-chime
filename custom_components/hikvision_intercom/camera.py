@@ -100,7 +100,7 @@ async def _pipe(sink: _Sink, stdin: asyncio.StreamWriter) -> None:
                 break
             stdin.write(item[2])
             await stdin.drain()
-    except ConnectionResetError, BrokenPipeError, asyncio.CancelledError:
+    except (ConnectionResetError, BrokenPipeError, asyncio.CancelledError):
         pass
     finally:
         with contextlib.suppress(Exception):
@@ -761,7 +761,7 @@ class HikLocalCamera(Camera):
                     continue
                 await response.write(mux.mux(ts, pending + data, rap))
                 pending = b""
-        except ConnectionResetError, ConnectionAbortedError, asyncio.CancelledError:
+        except (ConnectionResetError, ConnectionAbortedError, asyncio.CancelledError):
             pass
         finally:
             await self._source.unsubscribe(sink)
@@ -797,7 +797,7 @@ class HikLocalCamera(Camera):
                     + jpeg
                     + b"\r\n"
                 )
-        except ConnectionResetError, ConnectionAbortedError, asyncio.CancelledError:
+        except (ConnectionResetError, ConnectionAbortedError, asyncio.CancelledError):
             pass
         finally:
             await self._source.release()

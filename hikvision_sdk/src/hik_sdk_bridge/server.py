@@ -171,7 +171,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(_STATUS[error.code], {"error": error.code})
         except OverflowError:
             self._send(413, {"error": "too_large"})
-        except ValueError, OSError:
+        except (ValueError, OSError):
             self._send(400, {"error": "bad_request"})
         else:
             self._send(200, {"frames": frames})

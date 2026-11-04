@@ -56,7 +56,7 @@ def _csv_first_int(value: str | None) -> int | None:
     """First field of a "14,-1,-1,..." CSV string as int (negatives -> None)."""
     try:
         v = int(str(value).split(",")[0])
-    except ValueError, TypeError, AttributeError:
+    except (ValueError, TypeError, AttributeError):
         return None
     return v if v >= 0 else None
 
@@ -308,7 +308,7 @@ class HikConnectClient:
         meta = (r.get("meta") or {}).get("code")
         try:
             rc = json.loads(r.get("data") or "{}").get("rc")
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             rc = None
         if meta != 200 or (rc is not None and rc != 1):
             raise HikConnectError(f"{what} rejected (meta={meta}, rc={rc})")
@@ -338,7 +338,7 @@ class HikConnectClient:
         meta = (r.get("meta") or {}).get("code")
         try:
             status = json.loads(r.get("data") or "{}")
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             status = {}
         code = str(status.get("statusCode", ""))
         if meta != 200 or code not in ("", "1"):
@@ -490,7 +490,7 @@ class HikConnectClient:
         r = self.isapi(serial, "GET", "/ISAPI/AccessControl/AcsWorkStatus?format=json")
         try:
             status = json.loads(r.get("data") or "{}").get("AcsWorkStatus")
-        except ValueError, TypeError, AttributeError:
+        except (ValueError, TypeError, AttributeError):
             status = None
         return status if isinstance(status, dict) else {}
 
@@ -498,13 +498,13 @@ class HikConnectClient:
         r = self.isapi(serial, "GET", "/ISAPI/VideoIntercom/operationTime")
         try:
             root = ET.fromstring(r.get("data") or "")
-        except ET.ParseError, DefusedXmlException:
+        except (ET.ParseError, DefusedXmlException):
             return {}
         out: dict[str, int] = {}
         for el in root:
             try:
                 out[el.tag.split("}")[-1]] = int(el.text)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 continue
         return out
 
@@ -678,13 +678,13 @@ class HikConnectClient:
         """channel -> lock count, from statusInfos[serial].optionals.lockNum."""
         try:
             raw = json.loads((status_info.get("optionals") or {})["lockNum"])
-        except KeyError, TypeError, ValueError:
+        except (KeyError, TypeError, ValueError):
             return {}
         out: dict[int, int] = {}
         for k, v in raw.items():
             try:
                 out[int(k)] = int(v)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 continue
         return out
 

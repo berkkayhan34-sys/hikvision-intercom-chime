@@ -72,7 +72,7 @@ def decode_wav(data: bytes) -> Audio:
             pcm = source.readframes(frames)
             if len(pcm) != frames * 2:
                 raise AudioError("truncated_wav")
-    except wave.Error, EOFError, struct.error:
+    except (wave.Error, EOFError, struct.error):
         raise AudioError("invalid_wav") from None
     return Audio(pcm)
 

@@ -506,7 +506,7 @@ class StationSubentryFlow(ConfigSubentryFlow):
                     return self.async_update_and_abort(entry, subentry, data=data)
                 except AudioError as error:
                     errors["base"] = str(error)
-                except OSError, ValueError:
+                except (OSError, ValueError):
                     errors["base"] = "invalid_wav"
         return self.async_show_form(
             step_id="reconfigure",

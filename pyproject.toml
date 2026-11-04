@@ -4,7 +4,7 @@ pythonpath = ["hikvision_sdk/src"]
 asyncio_mode = "auto"
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py311"
 extend-exclude = ["licenses"]
 
 [tool.ruff.lint]

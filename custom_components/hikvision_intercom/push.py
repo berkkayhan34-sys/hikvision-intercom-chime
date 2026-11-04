@@ -249,7 +249,7 @@ class HikConnectPush:
     def _on_message(self, client, userdata, msg):
         try:
             data = json.loads(msg.payload.decode("utf-8"))
-        except ValueError, UnicodeDecodeError:
+        except (ValueError, UnicodeDecodeError):
             _LOGGER.debug("Undecodable push payload: %r", msg.payload[:200])
             return
 
