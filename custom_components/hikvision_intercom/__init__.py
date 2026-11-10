@@ -39,7 +39,7 @@ from .hikconnect_api import HikConnectAuthError, HikConnectClient, HikConnectErr
 from .longlink import HikConnectLongLink
 from .push import HikConnectPush
 from .storage import AudioStore
-from .views import DoorListenView
+from .views import DoorListenView, DoorTalkView
 
 _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -66,6 +66,7 @@ def _call_poll_interval(entry: ConfigEntry) -> timedelta:
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.http.register_view(DoorListenView())
+    hass.http.register_view(DoorTalkView())
     return True
 
 

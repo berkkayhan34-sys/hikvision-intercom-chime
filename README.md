@@ -68,14 +68,19 @@ are kept privately under `.storage/hikvision_intercom/`; at most 16 per station.
 
 With a call answered, you can speak to the visitor and hear the door from Home Assistant.
 
-- **Talk**: the app's own **Assist** records your voice natively (so this works on `http://homeassistant.local` too, where a
+- **Talk from a dashboard**: the call status sensor publishes `talk_path` (a WebSocket, 16 kHz 16-bit mono PCM in binary
+  messages, opened on a path signed with `auth/sign_path`) and `listen_path`, so a dashboard that reads them (the Home Control
+  dashboard's door-call popup does) can answer, talk and listen without knowing this integration. Any signed-in user may use them;
+  one person talks at a time. A browser gives a page no microphone on plain `http` (other than localhost), so there the dashboard
+  falls back to the phone app's Assist, below; on `https` the microphone works in the page.
+- **Talk with Assist**: the app's own **Assist** records your voice natively (so this works on `http://homeassistant.local` too, where a
   web page cannot use the microphone). Create a voice assistant (Settings -> Voice assistants) with *Speech-to-text* = the
   **Call microphone** entity of the doorbell, *Conversation agent* = **Call acknowledge**, *Text-to-speech* = none. Open
   Assist in the app, pick it and speak; Assist ends a message at the first long pause, so tap again for the next one. If the
   call is still ringing when you speak, it is answered first. The speech goes through the SDK bridge app into the call.
 - **Listen**: the door's audio during a call is a live WAV stream at
-  `/api/hikvision_intercom/listen/<entry id>/<station id>` (administrators only, played from a signed address). The Home
-  Control dashboard shows a Listen button on the camera's intercom bar when the camera device has `ix.listen` set to that path.
+  `/api/hikvision_intercom/listen/<entry id>/<station id>` (any signed-in user, played from a signed address). The Home
+  Control dashboard plays it from the door-call popup (it reads the sensor's `listen_path`).
 - The app only opens the voice channel while the station reports a call in progress, and closes it when the call ends.
 
 What is *not* verified: the written flow follows the Hikvision SDK and the community Hikvision Doorbell app (audio sent after

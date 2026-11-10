@@ -18,7 +18,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import CALL_STATES, DOMAIN
+from .const import CALL_STATES, DOMAIN, LISTEN_PATH, TALK_PATH
 from .entity import ChimeEntity
 
 _CALL_ICONS = {
@@ -213,7 +213,21 @@ class HikCallStatusSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        return self._entry().get("info") or {}
+        return {**(self._entry().get("info") or {}), **self._audio_paths()}
+
+    def _audio_paths(self) -> dict:
+        """Where a dashboard listens to and talks into this station's calls (see views.py); nothing when there is no
+        local station to carry the audio."""
+        data = self.hass.data.get(DOMAIN, {}) if self.hass else {}
+        for entry_id, entry_data in data.items():
+            for subentry_id, door_call in entry_data.get("door_calls", {}).items():
+                if door_call.serial == self._serial:
+                    ids = {"entry_id": entry_id, "subentry_id": subentry_id}
+                    return {
+                        "listen_path": LISTEN_PATH.format(**ids),
+                        "talk_path": TALK_PATH.format(**ids),
+                    }
+        return {}
 
 
 class HikMetricSensor(CoordinatorEntity, SensorEntity):

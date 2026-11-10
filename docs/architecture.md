@@ -68,7 +68,7 @@ when the call ends, or after 10 minutes). Routes: `POST /v1/stations/<n>/call/ta
 spoken, chunked, paced to real time with a 0.5 s lead), `GET .../call/listen` (chunked response, a bounded queue per listener
 that drops the oldest audio), `DELETE .../call`. The chime and call audio exclude each other (`busy`; `no_call` when there is
 none). In Home Assistant: `door_call.py` answers a ringing call through the cloud first (only when the station is the
-account's single device), `door_stt.py` is the Assist engine (16 kHz PCM -> 8 kHz mu-law), `views.py` the WAV listen stream.
+account's single device), `door_stt.py` is the Assist engine (16 kHz PCM -> 8 kHz mu-law), `views.py` the WAV listen stream and the talk WebSocket (16 kHz PCM from a dashboard's microphone into the same `DoorCall.talk`; the call status sensor publishes both paths as `listen_path` and `talk_path`).
 Format assumptions to confirm on a real call: send mu-law (known to work for the chime), receive mu-law.
 
 ## Call state

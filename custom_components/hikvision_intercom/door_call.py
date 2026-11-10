@@ -30,6 +30,11 @@ class DoorCall:
     def name(self) -> str:
         return self._chime.station_name
 
+    @property
+    def serial(self) -> str | None:
+        """The cloud device that rings with this station, when it is known."""
+        return self._chime.device_serial
+
     async def _state(self) -> str:
         status = await self._chime.link.call(lambda client: client.status(self.name))
         return status.get("call_status", "unknown")

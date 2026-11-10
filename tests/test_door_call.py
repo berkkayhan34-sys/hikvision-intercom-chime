@@ -390,13 +390,14 @@ async def test_the_listen_endpoint_streams_wav_to_an_administrator(
     assert await response.content.read() == b""
 
 
-async def test_the_listen_endpoint_is_for_administrators_only(
+async def test_the_listen_endpoint_is_open_to_every_signed_in_user(
     hass, live, entry, hass_client, hass_read_only_access_token
 ):
     await setup(hass, entry)
     client = await hass_client(hass_read_only_access_token)
     response = await client.get(await listen_url(hass, entry))
-    assert response.status == 403 and live.listeners == []
+    assert response.status == 200 and response.headers["Content-Type"] == "audio/wav"
+    live.listeners[0].put_nowait(None)
 
 
 async def test_the_listen_endpoint_needs_a_login(
@@ -421,6 +422,125 @@ async def test_an_unknown_station_is_404(hass, live, entry, hass_client):
     assert (
         await client.get(f"/api/hikvision_intercom/listen/{entry.entry_id}/nope")
     ).status == 404
+
+
+# --- the talk endpoint (a dashboard's microphone) ------------------------------------------------------------------------------
+@pytest.fixture
+def quick_heartbeat():
+    """A short heartbeat, so the socket's timer is not left pending when the test ends."""
+    with patch("custom_components.hikvision_intercom.views.TALK_HEARTBEAT", 0.05):
+        yield
+
+
+async def talk_url(hass, entry):
+    subentry_id = next(iter(entry.subentries))
+    return f"/api/hikvision_intercom/talk/{entry.entry_id}/{subentry_id}"
+
+
+async def test_the_talk_endpoint_sends_a_dashboards_speech_into_the_call(
+    hass, live, entry, hass_client
+):
+    await setup(hass, entry)
+    client = await hass_client()
+    socket = await client.ws_connect(await talk_url(hass, entry))
+    for start in range(0, 6400, 640):
+        await socket.send_bytes(tone(0.2)[start : start + 640])
+    await socket.close()
+    for _ in range(40):
+        if live.talked:
+            break
+        await asyncio.sleep(0.05)
+    assert b"".join(live.talked)  # mu-law frames reached the station
+    assert len(b"".join(live.talked)) % 160 == 0
+
+
+async def test_the_talk_endpoint_says_why_when_there_is_no_call(
+    hass, live, entry, hass_client, quick_heartbeat
+):
+    live.call = "idle"
+    await setup(hass, entry)
+    client = await hass_client()
+    socket = await client.ws_connect(await talk_url(hass, entry))
+    assert (await socket.receive_json()) == {"error": "no_call"}
+    assert live.talk_requests == 0
+    assert (await socket.receive()).type.name in {"CLOSE", "CLOSED"}
+    await socket.close()
+    await asyncio.sleep(0.15)
+
+
+async def test_the_talk_endpoint_is_open_to_every_signed_in_user(
+    hass, live, entry, hass_client, hass_read_only_access_token
+):
+    await setup(hass, entry)
+    client = await hass_client(hass_read_only_access_token)
+    socket = await client.ws_connect(await talk_url(hass, entry))
+    await socket.send_bytes(tone(0.2))
+    await socket.close()
+    for _ in range(40):
+        if live.talked:
+            break
+        await asyncio.sleep(0.05)
+    assert live.talked
+
+
+async def test_the_talk_endpoint_needs_a_login(hass, live, entry, hass_client_no_auth):
+    await setup(hass, entry)
+    client = await hass_client_no_auth()
+    assert (await client.get(await talk_url(hass, entry))).status == 401
+
+
+async def test_an_unknown_station_cannot_be_talked_to(hass, live, entry, hass_client):
+    await setup(hass, entry)
+    client = await hass_client()
+    response = await client.get(f"/api/hikvision_intercom/talk/{entry.entry_id}/nope")
+    assert response.status == 404
+
+
+async def test_a_second_talker_is_told_the_line_is_busy(
+    hass, live, entry, hass_client, quick_heartbeat
+):
+    await setup(hass, entry)
+    client = await hass_client()
+    first = await client.ws_connect(await talk_url(hass, entry))
+    await first.send_bytes(tone(0.05))
+    for _ in range(
+        100
+    ):  # the first talker holds the line once the station has its request
+        if live.talk_requests:
+            break
+        await asyncio.sleep(0.05)
+    assert live.talk_requests == 1
+    second = await client.ws_connect(await talk_url(hass, entry))
+    assert (await second.receive_json()) == {"error": "busy"}
+    await second.close()
+    await first.close()
+    await asyncio.sleep(0.15)
+
+
+async def test_a_message_larger_than_the_limit_ends_the_talk(
+    hass, live, entry, hass_client
+):
+    await setup(hass, entry)
+    client = await hass_client()
+    socket = await client.ws_connect(await talk_url(hass, entry))
+    await socket.send_bytes(b"\x00" * (64 * 1024 + 1))
+    message = await socket.receive()
+    assert message.type.name in {"CLOSE", "CLOSING", "CLOSED"} or message.data in (
+        1009,
+        None,
+    )
+    await socket.close()
+
+
+async def test_the_call_status_sensor_publishes_where_to_listen_and_talk(
+    hass, live, entry
+):
+    await setup(hass, entry)
+    state = hass.states.get("sensor.ds_kh6320_wte1_call_status")
+    subentry_id = next(iter(entry.subentries))
+    ids = f"{entry.entry_id}/{subentry_id}"
+    assert state.attributes["listen_path"] == f"/api/hikvision_intercom/listen/{ids}"
+    assert state.attributes["talk_path"] == f"/api/hikvision_intercom/talk/{ids}"
 
 
 # --- through Home Assistant's own Assist pipeline --------------------------------------------------------------------------------
