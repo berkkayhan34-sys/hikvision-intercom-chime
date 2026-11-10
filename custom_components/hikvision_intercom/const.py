@@ -93,3 +93,7 @@ MAX_TOTAL_SECONDS = 60
 MAX_SOURCES = 16
 SAMPLE_RATE = 8000
 PEAK = 32760
+
+# Where a dashboard listens to and talks into a station's calls (views.py); the call status sensor publishes both.
+LISTEN_PATH = "/api/hikvision_intercom/listen/{entry_id}/{subentry_id}"
+TALK_PATH = "/api/hikvision_intercom/talk/{entry_id}/{subentry_id}"

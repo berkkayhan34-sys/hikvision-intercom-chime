@@ -31,6 +31,13 @@ TO_REDACT = {
 ISAPI_PATHS = (
     "/ISAPI/VideoIntercom/WatchPoint?format=json",
     "/ISAPI/VideoIntercom/deviceCommunication?format=json",
+    # Read-only questions about the call destinations the station can ring (the station reports "related device address" and
+    # "incoming call linkage" in its capabilities); a path the station does not have is recorded as an error, not a failure.
+    "/ISAPI/System/relatedDeviceAddress?format=json",
+    "/ISAPI/VideoIntercom/relatedDeviceAddress?format=json",
+    "/ISAPI/VideoIntercom/incomingCallLinkage?format=json",
+    "/ISAPI/VideoIntercom/callerInfo?format=json",
+    "/ISAPI/VideoIntercom/CallerList?format=json",
 )
 
 
